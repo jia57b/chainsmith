@@ -128,8 +128,8 @@ jobs:
               "executionMethod": "docker",
               "docker": {
                 "containerPatterns": {
-                  "executionLayer": "validator{index}-geth",
-                  "consensusLayer": "validator{index}-node"
+                  "executionLayer": "${CHAIN_ENV}-validator{index}-geth-1",
+                  "consensusLayer": "${CHAIN_ENV}-validator{index}-node-1"
                 },
                 "timeout": 30000
               },
