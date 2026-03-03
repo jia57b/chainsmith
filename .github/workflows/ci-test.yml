@@ -6,6 +6,12 @@ on:
   # pull_request:
   #   branches: [main]
   workflow_dispatch:
+    inputs:
+      chain_name:
+        description: 'Chain name (e.g. 0g-docker)'
+        required: false
+        default: '0g-docker'
+        type: string
 
 # Sets permissions of the GITHUB_TOKEN for GitHub Pages deployment
 permissions:
@@ -20,9 +26,11 @@ concurrency:
 
 jobs:
   test:
-    name: Run Tests on 0G Localnet
+    name: Run Tests (${{ inputs.chain_name || '0g-docker' }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      CHAIN_NAME: ${{ inputs.chain_name || '0g-docker' }}
 
     steps:
       # ─── Setup ───────────────────────────────────────────────
@@ -45,20 +53,20 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # ─── 0G Localnet ────────────────────────────────────────
-      - name: Pull 0G Docker images
-        working-directory: chains/0g-docker
+      - name: Pull Docker images
+        working-directory: chains/${{ env.CHAIN_NAME }}
         run: |
           DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/node:v2.0.4
           DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/geth:v2.0.4
 
       - name: Initialize multinode localnet
-        working-directory: chains/0g-docker
+        working-directory: chains/${{ env.CHAIN_NAME }}
         run: |
           chmod +x init-multinode.sh
           ./init-multinode.sh
 
       - name: Start localnet
-        working-directory: chains/0g-docker
+        working-directory: chains/${{ env.CHAIN_NAME }}
         run: |
           docker compose -f docker-compose.multinode.yml up -d
           echo "Waiting 10s for containers to start..."
@@ -85,13 +93,13 @@ jobs:
             sleep 5
           done
           echo "❌ Chain failed to produce blocks within timeout"
-          docker compose -f chains/0g-docker/docker-compose.multinode.yml logs --tail=50
+          docker compose -f chains/${CHAIN_NAME}/docker-compose.multinode.yml logs --tail=50
           exit 1
 
       # ─── Test Configuration ─────────────────────────────────
       - name: Generate test configuration
         run: |
-          cat > tests/config.json << 'EOF'
+          cat > tests/config.json << EOF
           {
             "testConfig": {
               "performanceExpect": {
@@ -107,8 +115,8 @@ jobs:
                 "timeout": 300000
               }
             },
-            "chain-1": {
-              "description": "CI 0G Localnet (4 validators)",
+            "${CHAIN_NAME}": {
+              "description": "CI Localnet (4 validators)",
               "consensusLayer": "cosmos",
               "executeLayer": "evm",
               "chainId": 16601,
@@ -181,14 +189,14 @@ jobs:
           }
           EOF
           echo "✅ tests/config.json generated"
-          cat tests/config.json | jq '.["chain-1"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
+          cat tests/config.json | jq '.["'"$CHAIN_NAME"'"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
 
       - name: Generate .env file
         run: |
-          cat > .env << 'EOF'
-          CHAIN_ENV=chain-1
+          cat > .env << EOF
+          CHAIN_ENV=${CHAIN_NAME}
           EOF
-          echo "✅ .env generated"
+          echo "✅ .env generated (CHAIN_ENV=${CHAIN_NAME})"
 
       # ─── Run Tests ──────────────────────────────────────────
       - name: Test - Basic
