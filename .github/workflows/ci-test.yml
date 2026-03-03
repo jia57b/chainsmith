@@ -7,11 +7,13 @@ on:
   #   branches: [main]
   workflow_dispatch:
     inputs:
-      chain_name:
-        description: 'Chain name (e.g. 0g-docker)'
+      chain:
+        description: 'Run test on chain'
         required: false
         default: '0g-docker'
-        type: string
+        type: choice
+        options:
+          - 0g-docker
 
 # Sets permissions of the GITHUB_TOKEN for GitHub Pages deployment
 permissions:
@@ -26,11 +28,11 @@ concurrency:
 
 jobs:
   test:
-    name: Run Tests (${{ inputs.chain_name || '0g-docker' }})
+    name: Run Tests (${{ inputs.chain || '0g-docker' }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CHAIN_NAME: ${{ inputs.chain_name || '0g-docker' }}
+      CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
 
     steps:
       # ─── Setup ───────────────────────────────────────────────
@@ -54,19 +56,19 @@ jobs:
 
       # ─── 0G Localnet ────────────────────────────────────────
       - name: Pull Docker images
-        working-directory: chains/${{ env.CHAIN_NAME }}
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: |
           DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/node:v2.0.4
           DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/geth:v2.0.4
 
       - name: Initialize multinode localnet
-        working-directory: chains/${{ env.CHAIN_NAME }}
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: |
           chmod +x init-multinode.sh
           ./init-multinode.sh
 
       - name: Start localnet
-        working-directory: chains/${{ env.CHAIN_NAME }}
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: |
           docker compose -f docker-compose.multinode.yml up -d
           echo "Waiting 10s for containers to start..."
@@ -93,7 +95,7 @@ jobs:
             sleep 5
           done
           echo "❌ Chain failed to produce blocks within timeout"
-          docker compose -f chains/${CHAIN_NAME}/docker-compose.multinode.yml logs --tail=50
+          docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50
           exit 1
 
       # ─── Test Configuration ─────────────────────────────────
@@ -115,7 +117,7 @@ jobs:
                 "timeout": 300000
               }
             },
-            "${CHAIN_NAME}": {
+            "${CHAIN_ENV}": {
               "description": "CI Localnet (4 validators)",
               "consensusLayer": "cosmos",
               "executeLayer": "evm",
@@ -189,14 +191,14 @@ jobs:
           }
           EOF
           echo "✅ tests/config.json generated"
-          cat tests/config.json | jq '.["'"$CHAIN_NAME"'"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
+          cat tests/config.json | jq '.["'"$CHAIN_ENV"'"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
 
       - name: Generate .env file
         run: |
           cat > .env << EOF
-          CHAIN_ENV=${CHAIN_NAME}
+          CHAIN_ENV=${CHAIN_ENV}
           EOF
-          echo "✅ .env generated (CHAIN_ENV=${CHAIN_NAME})"
+          echo "✅ .env generated (CHAIN_ENV=${CHAIN_ENV})"
 
       # ─── Run Tests ──────────────────────────────────────────
       - name: Test - Basic
