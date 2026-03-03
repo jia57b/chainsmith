@@ -1,7 +1,6 @@
 {
     "description": "Load and Stress Test Configuration",
     "usage": "Copy to load-stress.config.json and adjust settings for your environment",
-
     "environments": {
         "local": {
             "createNewWallet": true,
@@ -23,7 +22,6 @@
             "walletCount": 5
         }
     },
-
     "tests": {
         "stress01": {
             "name": "Concurrent Transaction Test",
@@ -35,23 +33,32 @@
         "stress02": {
             "name": "Batch Transaction Test",
             "description": "Test batch transactions with different batch sizes",
-            "sourceWalletCount": 5,
+            "sourceWalletCount": 50,
             "destWalletCount": 1,
-            "batchSize": [2, 5, 10],
+            "batchSize": [
+                2,
+                5,
+                10
+            ],
             "timeout": 600000
         },
         "stress03": {
             "name": "Gas Price Optimization Test",
             "description": "Test transactions with different gas prices",
-            "sourceWalletCount": 5,
+            "sourceWalletCount": 50,
             "destWalletCount": 1,
-            "gasPricesGwei": [20, 30, 40, 50],
+            "gasPricesGwei": [
+                20,
+                30,
+                40,
+                50
+            ],
             "timeout": 600000
         },
         "load01": {
             "name": "Sustained Load Test",
             "description": "Maintain consistent TPS over time",
-            "sourceWalletCount": 5,
+            "sourceWalletCount": 50,
             "destWalletCount": 1,
             "testDuration": 1,
             "batchSize": 2,

@@ -191,6 +191,10 @@ jobs:
           echo "✅ tests/config.json generated"
           cat tests/config.json | jq '.["'"$CHAIN_ENV"'"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
 
+      - name: Copy and generate load test configuration
+        run: |
+          cp tests/load-stress.config.example.json tests/load-stress.config.json
+
       - name: Generate .env file
         run: |
           cat > .env << EOF
