@@ -218,6 +218,10 @@ jobs:
       - name: Test - Performance
         continue-on-error: true
         run: pnpm test:performance
+      
+      - name: Test - Load Stress
+        continue-on-error: true
+        run: pnpm test:load:stress
 
       - name: Test - Fault Tolerance
         continue-on-error: true
