@@ -225,62 +225,62 @@ jobs:
   #       continue-on-error: true
   #       run: pnpm test:fault-tolerance
 
-  #     # ─── Reports ────────────────────────────────────────────
-  #     - name: Merge test reports
-  #       if: always()
-  #       run: |
-  #         chmod +x scripts/merge-reports.sh
-  #         bash scripts/merge-reports.sh
+      # ─── Reports ────────────────────────────────────────────
+      - name: Merge test reports
+        if: always()
+        run: |
+          chmod +x scripts/merge-reports.sh
+          bash scripts/merge-reports.sh
 
-  #     - name: Upload test report artifact
-  #       if: always()
-  #       uses: actions/upload-artifact@v4
-  #       with:
-  #         name: test-report
-  #         path: tests/test-report/merged/
-  #         retention-days: 30
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: tests/test-report/merged/
+          retention-days: 30
 
-  #     - name: Setup Pages
-  #       if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #       uses: actions/configure-pages@v5
+      - name: Setup Pages
+        # if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/configure-pages@v5
 
-  #     - name: Upload Pages artifact
-  #       if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #       uses: actions/upload-pages-artifact@v3
-  #       with:
-  #         path: tests/test-report/merged/
+      - name: Upload Pages artifact
+        # if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: tests/test-report/merged/
 
-  #     # ─── Cleanup & Debug ────────────────────────────────────
-  #     - name: Collect docker logs on failure
-  #       if: failure()
-  #       working-directory: chains/0g-docker
-  #       run: |
-  #         echo "=== Docker container status ==="
-  #         docker compose -f docker-compose.multinode.yml ps
-  #         echo ""
-  #         echo "=== Validator 1 Node logs (last 100 lines) ==="
-  #         docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 || true
-  #         echo ""
-  #         echo "=== Validator 1 Geth logs (last 100 lines) ==="
-  #         docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 || true
+      # ─── Cleanup & Debug ────────────────────────────────────
+      - name: Collect docker logs on failure
+        if: failure()
+        working-directory: chains/${{ env.CHAIN_ENV }}
+        run: |
+          echo "=== Docker container status ==="
+          docker compose -f docker-compose.multinode.yml ps
+          echo ""
+          echo "=== Validator 1 Node logs (last 100 lines) ==="
+          docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 || true
+          echo ""
+          echo "=== Validator 1 Geth logs (last 100 lines) ==="
+          docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 || true
 
-  #     - name: Stop localnet
-  #       if: always()
-  #       working-directory: chains/0g-docker
-  #       run: docker compose -f docker-compose.multinode.yml down -v || true
+      - name: Stop localnet
+        if: always()
+        working-directory: chains/${{ env.CHAIN_ENV }}
+        run: docker compose -f docker-compose.multinode.yml down -v || true
 
-  # # ─── Deploy Report to GitHub Pages ──────────────────────────
-  # deploy-report:
-  #   name: Deploy Report to GitHub Pages
-  #   needs: test
-  #   if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-  #   runs-on: ubuntu-latest
+  # ─── Deploy Report to GitHub Pages ──────────────────────────
+  deploy-report:
+    name: Deploy Report to GitHub Pages
+    needs: test
+    # if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
 
-  #   environment:
-  #     name: github-pages
-  #     url: ${{ steps.deployment.outputs.page_url }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
-  #   steps:
-  #     - name: Deploy to GitHub Pages
-  #       id: deployment
-  #       uses: actions/deploy-pages@v4
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
