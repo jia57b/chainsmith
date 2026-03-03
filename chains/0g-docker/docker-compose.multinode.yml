@@ -1,0 +1,388 @@
+# docker-compose.multinode.yml
+# 0G 4-Node Localnet for ChainSmith Fault Tolerance Testing
+#
+# Usage:
+#   1. Init: ./init-multinode.sh
+#   2. Start: docker compose -f docker-compose.multinode.yml up -d
+#   3. Check status: docker compose -f docker-compose.multinode.yml ps
+#   4. Check logs: docker compose -f docker-compose.multinode.yml logs -f validator1-node
+#   5. Stop: docker compose -f docker-compose.multinode.yml down
+
+services:
+  # ============ Validator 1 (node1 + geth1) ============
+  validator1-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/node:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    environment:
+      - MONIKER=validator1
+      - GOGC=${NODE_GOGC:-900}
+      - GOMEMLIMIT=${NODE_GOMEMLIMIT:-8GiB}
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      run start
+      --rpc.laddr "tcp://0.0.0.0:26657"
+      --chaincfg.chain-spec "devnet"
+      --chaincfg.kzg.trusted-setup-path=/home/zerog/.0gchain/config/kzg-trusted-setup.json
+      --chaincfg.engine.jwt-secret-path=/home/zerog/.0gchain/config/jwt-secret.hex
+      --chaincfg.engine.rpc-dial-url "http://validator1-geth:8551"
+      --chaincfg.kzg.implementation=crate-crypto/go-kzg-4844
+      --chaincfg.block-store-service.enabled
+      --chaincfg.node-api.enabled
+      --chaincfg.node-api.address "0.0.0.0:3500"
+      --chaincfg.node-api.logging
+      --chaincfg.logger.log-level ${NODE_LOG_LEVEL:-info}
+      --pruning=nothing
+      --home "/home/zerog/.0gchain"
+      --proxy_app "tcp://0.0.0.0:26658"
+      --p2p.laddr "tcp://0.0.0.0:26656"
+      --p2p.persistent_peers "${PERSISTENT_PEERS}"
+      --chaincfg.restaking.enabled
+      --chaincfg.restaking.symbiotic-rpc-dial-url "http://validator1-geth:8545"
+    volumes:
+      - type: bind
+        source: ./configs/node/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator1_node_data
+        target: /home/zerog/.0gchain/data
+      - type: volume
+        source: validator1_node_config
+        target: /home/zerog/.0gchain/config
+    ports:
+      - "26657:26657"   # CometBFT RPC
+      - "1317:1317"     # Cosmos REST
+      - "26656:26656"   # P2P
+
+  validator1-geth:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/geth:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      --config geth-config.toml
+      --datadir /home/zerog/geth_home
+      --networkid 16601
+      --syncmode full
+      --port 30303
+    volumes:
+      - type: bind
+        source: ./configs/geth/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator1_geth_data
+        target: /home/zerog/geth_home
+    ports:
+      - "8545:8545"     # EVM JSON-RPC
+
+  # ============ Validator 2 (node2 + geth2) ============
+  validator2-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/node:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    environment:
+      - MONIKER=validator2
+      - GOGC=${NODE_GOGC:-900}
+      - GOMEMLIMIT=${NODE_GOMEMLIMIT:-8GiB}
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      run start
+      --rpc.laddr "tcp://0.0.0.0:26657"
+      --chaincfg.chain-spec "devnet"
+      --chaincfg.kzg.trusted-setup-path=/home/zerog/.0gchain/config/kzg-trusted-setup.json
+      --chaincfg.engine.jwt-secret-path=/home/zerog/.0gchain/config/jwt-secret.hex
+      --chaincfg.engine.rpc-dial-url "http://validator2-geth:8551"
+      --chaincfg.kzg.implementation=crate-crypto/go-kzg-4844
+      --chaincfg.block-store-service.enabled
+      --chaincfg.node-api.enabled
+      --chaincfg.node-api.address "0.0.0.0:3500"
+      --chaincfg.node-api.logging
+      --chaincfg.logger.log-level ${NODE_LOG_LEVEL:-info}
+      --pruning=nothing
+      --home "/home/zerog/.0gchain"
+      --proxy_app "tcp://0.0.0.0:26658"
+      --p2p.laddr "tcp://0.0.0.0:26656"
+      --p2p.persistent_peers "${PERSISTENT_PEERS}"
+      --chaincfg.restaking.enabled
+      --chaincfg.restaking.symbiotic-rpc-dial-url "http://validator2-geth:8545"
+    volumes:
+      - type: bind
+        source: ./configs/node/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator2_node_data
+        target: /home/zerog/.0gchain/data
+      - type: volume
+        source: validator2_node_config
+        target: /home/zerog/.0gchain/config
+    ports:
+      - "36657:26657"   # CometBFT RPC
+      - "21317:1317"    # Cosmos REST
+      - "36656:26656"   # P2P
+
+  validator2-geth:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/geth:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      --config geth-config.toml
+      --datadir /home/zerog/geth_home
+      --networkid 16601
+      --syncmode full
+      --port 30304
+    volumes:
+      - type: bind
+        source: ./configs/geth/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator2_geth_data
+        target: /home/zerog/geth_home
+    ports:
+      - "28545:8545"    # EVM JSON-RPC
+
+  # ============ Validator 3 (node3 + geth3) ============
+  validator3-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/node:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    environment:
+      - MONIKER=validator3
+      - GOGC=${NODE_GOGC:-900}
+      - GOMEMLIMIT=${NODE_GOMEMLIMIT:-8GiB}
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      run start
+      --rpc.laddr "tcp://0.0.0.0:26657"
+      --chaincfg.chain-spec "devnet"
+      --chaincfg.kzg.trusted-setup-path=/home/zerog/.0gchain/config/kzg-trusted-setup.json
+      --chaincfg.engine.jwt-secret-path=/home/zerog/.0gchain/config/jwt-secret.hex
+      --chaincfg.engine.rpc-dial-url "http://validator3-geth:8551"
+      --chaincfg.kzg.implementation=crate-crypto/go-kzg-4844
+      --chaincfg.block-store-service.enabled
+      --chaincfg.node-api.enabled
+      --chaincfg.node-api.address "0.0.0.0:3500"
+      --chaincfg.node-api.logging
+      --chaincfg.logger.log-level ${NODE_LOG_LEVEL:-info}
+      --pruning=nothing
+      --home "/home/zerog/.0gchain"
+      --proxy_app "tcp://0.0.0.0:26658"
+      --p2p.laddr "tcp://0.0.0.0:26656"
+      --p2p.persistent_peers "${PERSISTENT_PEERS}"
+      --chaincfg.restaking.enabled
+      --chaincfg.restaking.symbiotic-rpc-dial-url "http://validator3-geth:8545"
+    volumes:
+      - type: bind
+        source: ./configs/node/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator3_node_data
+        target: /home/zerog/.0gchain/data
+      - type: volume
+        source: validator3_node_config
+        target: /home/zerog/.0gchain/config
+    ports:
+      - "46657:26657"   # CometBFT RPC
+      - "31317:1317"    # Cosmos REST
+      - "46656:26656"   # P2P
+
+  validator3-geth:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/geth:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      --config geth-config.toml
+      --datadir /home/zerog/geth_home
+      --networkid 16601
+      --syncmode full
+      --port 30305
+    volumes:
+      - type: bind
+        source: ./configs/geth/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator3_geth_data
+        target: /home/zerog/geth_home
+    ports:
+      - "38545:8545"    # EVM JSON-RPC
+
+  # ============ Validator 4 (node4 + geth4) ============
+  validator4-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/node:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    environment:
+      - MONIKER=validator4
+      - GOGC=${NODE_GOGC:-900}
+      - GOMEMLIMIT=${NODE_GOMEMLIMIT:-8GiB}
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      run start
+      --rpc.laddr "tcp://0.0.0.0:26657"
+      --chaincfg.chain-spec "devnet"
+      --chaincfg.kzg.trusted-setup-path=/home/zerog/.0gchain/config/kzg-trusted-setup.json
+      --chaincfg.engine.jwt-secret-path=/home/zerog/.0gchain/config/jwt-secret.hex
+      --chaincfg.engine.rpc-dial-url "http://validator4-geth:8551"
+      --chaincfg.kzg.implementation=crate-crypto/go-kzg-4844
+      --chaincfg.block-store-service.enabled
+      --chaincfg.node-api.enabled
+      --chaincfg.node-api.address "0.0.0.0:3500"
+      --chaincfg.node-api.logging
+      --chaincfg.logger.log-level ${NODE_LOG_LEVEL:-info}
+      --pruning=nothing
+      --home "/home/zerog/.0gchain"
+      --proxy_app "tcp://0.0.0.0:26658"
+      --p2p.laddr "tcp://0.0.0.0:26656"
+      --p2p.persistent_peers "${PERSISTENT_PEERS}"
+      --chaincfg.restaking.enabled
+      --chaincfg.restaking.symbiotic-rpc-dial-url "http://validator4-geth:8545"
+    volumes:
+      - type: bind
+        source: ./configs/node/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator4_node_data
+        target: /home/zerog/.0gchain/data
+      - type: volume
+        source: validator4_node_config
+        target: /home/zerog/.0gchain/config
+    ports:
+      - "56657:26657"   # CometBFT RPC
+      - "41317:1317"    # Cosmos REST
+      - "56656:26656"   # P2P
+
+  validator4-geth:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/geth:${NODE_TAG:-v2.0.4}
+    platform: linux/amd64
+    restart: unless-stopped
+    working_dir: /home/zerog
+    networks:
+      og-multi:
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      --config geth-config.toml
+      --datadir /home/zerog/geth_home
+      --networkid 16601
+      --syncmode full
+      --port 30306
+    volumes:
+      - type: bind
+        source: ./configs/geth/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: validator4_geth_data
+        target: /home/zerog/geth_home
+    ports:
+      - "48545:8545"    # EVM JSON-RPC
+
+volumes:
+  validator1_node_data:
+    external: true
+    name: validator1_node_data
+  validator1_node_config:
+    external: true
+    name: validator1_node_config
+  validator1_geth_data:
+    external: true
+    name: validator1_geth_data
+  validator2_node_data:
+    external: true
+    name: validator2_node_data
+  validator2_node_config:
+    external: true
+    name: validator2_node_config
+  validator2_geth_data:
+    external: true
+    name: validator2_geth_data
+  validator3_node_data:
+    external: true
+    name: validator3_node_data
+  validator3_node_config:
+    external: true
+    name: validator3_node_config
+  validator3_geth_data:
+    external: true
+    name: validator3_geth_data
+  validator4_node_data:
+    external: true
+    name: validator4_node_data
+  validator4_node_config:
+    external: true
+    name: validator4_node_config
+  validator4_geth_data:
+    external: true
+    name: validator4_geth_data
+
+networks:
+  og-multi:
+
