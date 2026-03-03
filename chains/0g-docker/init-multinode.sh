@@ -24,7 +24,7 @@ PLATFORM="linux/amd64"
 CHAIN_SPEC="devnet"
 
 # Deposit parameters
-DEPOSIT_AMOUNT=3200000000  # 32 OG tokens (gwei)
+DEPOSIT_AMOUNT=32000000000  # 32 OG tokens (gwei)
 WITHDRAWAL_ADDR="0x63df5c411aa90b9866e7e6082230ffbf61aeda8c"  # devnet withdrawal address
 
 NUM_VALIDATORS=4
@@ -260,6 +260,8 @@ echo ""
 echo "📝 Step 9/9: Updating PERSISTENT_PEERS in .env..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# copy .env.sample to .env
+cp "${SCRIPT_DIR}/.env.sample" "${SCRIPT_DIR}/.env"
 ENV_FILE="${SCRIPT_DIR}/.env"
 
 if [ -f "$ENV_FILE" ]; then

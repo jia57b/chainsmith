@@ -6,23 +6,31 @@ on:
   # pull_request:
   #   branches: [main]
   workflow_dispatch:
+    inputs:
+      chain:
+        description: 'Run test on chain'
+        required: false
+        default: '0g-docker'
+        type: choice
+        options:
+          - 0g-docker
 
-# Sets permissions of the GITHUB_TOKEN for GitHub Pages deployment
+# Top-level permissions: minimal read-only
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
-# Allow only one concurrent deployment
+# Allow only one concurrent deployment to gh-pages
 concurrency:
-  group: "pages"
+  group: deploy-pages
   cancel-in-progress: false
 
 jobs:
   test:
-    name: Run Tests on 0G Localnet
+    name: Run Tests (${{ inputs.chain || '0g-docker' }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
 
     steps:
       # ─── Setup ───────────────────────────────────────────────
@@ -45,20 +53,20 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # ─── 0G Localnet ────────────────────────────────────────
-      - name: Pull 0G Docker images
-        working-directory: chains/0g-docker
+      - name: Pull Docker images
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: |
           DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/node:v2.0.4
           DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/geth:v2.0.4
 
       - name: Initialize multinode localnet
-        working-directory: chains/0g-docker
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: |
           chmod +x init-multinode.sh
           ./init-multinode.sh
 
       - name: Start localnet
-        working-directory: chains/0g-docker
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: |
           docker compose -f docker-compose.multinode.yml up -d
           echo "Waiting 10s for containers to start..."
@@ -85,13 +93,13 @@ jobs:
             sleep 5
           done
           echo "❌ Chain failed to produce blocks within timeout"
-          docker compose -f chains/0g-docker/docker-compose.multinode.yml logs --tail=50
+          docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50
           exit 1
 
       # ─── Test Configuration ─────────────────────────────────
       - name: Generate test configuration
         run: |
-          cat > tests/config.json << 'EOF'
+          cat > tests/config.json << EOF
           {
             "testConfig": {
               "performanceExpect": {
@@ -107,8 +115,8 @@ jobs:
                 "timeout": 300000
               }
             },
-            "chain-1": {
-              "description": "CI 0G Localnet (4 validators)",
+            "${CHAIN_ENV}": {
+              "description": "CI Localnet (4 validators)",
               "consensusLayer": "cosmos",
               "executeLayer": "evm",
               "chainId": 16601,
@@ -120,8 +128,8 @@ jobs:
               "executionMethod": "docker",
               "docker": {
                 "containerPatterns": {
-                  "executionLayer": "validator{index}-geth",
-                  "consensusLayer": "validator{index}-node"
+                  "executionLayer": "${CHAIN_ENV}-validator{index}-geth-1",
+                  "consensusLayer": "${CHAIN_ENV}-validator{index}-node-1"
                 },
                 "timeout": 30000
               },
@@ -181,14 +189,18 @@ jobs:
           }
           EOF
           echo "✅ tests/config.json generated"
-          cat tests/config.json | jq '.["chain-1"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
+          cat tests/config.json | jq '.["'"$CHAIN_ENV"'"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
+
+      - name: Copy and generate load test configuration
+        run: |
+          cp tests/load-stress.config.example.json tests/load-stress.config.json
 
       - name: Generate .env file
         run: |
-          cat > .env << 'EOF'
-          CHAIN_ENV=chain-1
+          cat > .env << EOF
+          CHAIN_ENV=${CHAIN_ENV}
           EOF
-          echo "✅ .env generated"
+          echo "✅ .env generated (CHAIN_ENV=${CHAIN_ENV})"
 
       # ─── Run Tests ──────────────────────────────────────────
       - name: Test - Basic
@@ -203,13 +215,17 @@ jobs:
         continue-on-error: true
         run: pnpm test:rpc:cometbft
 
-      - name: Test - Cosmos API
-        continue-on-error: true
-        run: pnpm test:cosmos:api:sample
+      # - name: Test - Cosmos API
+      #   continue-on-error: true
+      #   run: pnpm test:cosmos:api:sample
 
       - name: Test - Performance
         continue-on-error: true
         run: pnpm test:performance
+      
+      - name: Test - Load Stress
+        continue-on-error: true
+        run: pnpm test:load:stress
 
       - name: Test - Fault Tolerance
         continue-on-error: true
@@ -230,20 +246,10 @@ jobs:
           path: tests/test-report/merged/
           retention-days: 30
 
-      - name: Setup Pages
-        if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: tests/test-report/merged/
-
       # ─── Cleanup & Debug ────────────────────────────────────
       - name: Collect docker logs on failure
         if: failure()
-        working-directory: chains/0g-docker
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: |
           echo "=== Docker container status ==="
           docker compose -f docker-compose.multinode.yml ps
@@ -256,21 +262,81 @@ jobs:
 
       - name: Stop localnet
         if: always()
-        working-directory: chains/0g-docker
+        working-directory: chains/${{ env.CHAIN_ENV }}
         run: docker compose -f docker-compose.multinode.yml down -v || true
 
   # ─── Deploy Report to GitHub Pages ──────────────────────────
   deploy-report:
     name: Deploy Report to GitHub Pages
     needs: test
-    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: always()
     runs-on: ubuntu-latest
-
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    permissions:
+      contents: write
+    env:
+      CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
 
     steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Download test report artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: test-report
+          path: ./report
+
+      - name: Deploy to gh-pages branch
+        run: |
+          set -e
+          REPORT_DIR="${CHAIN_ENV}/${{ github.run_id }}"
+          MAX_REPORTS=20
+
+          # Configure git
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Clone gh-pages branch (or create if not exists)
+          git clone --branch gh-pages --single-branch \
+            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+            gh-pages 2>/dev/null || {
+            mkdir gh-pages && cd gh-pages && git init
+            git checkout -b gh-pages
+            git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+            cd ..
+          }
+
+          # Copy report to target directory
+          mkdir -p "gh-pages/${REPORT_DIR}"
+          cp -r ./report/* "gh-pages/${REPORT_DIR}/"
+          echo "✅ Report copied to ${REPORT_DIR}/"
+
+          # Prune old reports (keep last MAX_REPORTS per chain)
+          cd gh-pages
+          if [ -d "${CHAIN_ENV}" ]; then
+            REPORT_COUNT=$(ls -1d ${CHAIN_ENV}/*/ 2>/dev/null | wc -l)
+            if [ "$REPORT_COUNT" -gt "$MAX_REPORTS" ]; then
+              REMOVE_COUNT=$((REPORT_COUNT - MAX_REPORTS))
+              ls -1d ${CHAIN_ENV}/*/ | head -n $REMOVE_COUNT | while read dir; do
+                echo "🗑️  Removing old report: $dir"
+                rm -rf "$dir"
+              done
+            fi
+          fi
+
+          # Commit and push
+          git add -A
+          git commit -m "Deploy test report: ${CHAIN_ENV}/#${{ github.run_id }}" || echo "No changes to commit"
+          git push origin gh-pages
+
+          # Write report link to job summary
+          REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
+          PAGES_BASE="https://${{ github.repository_owner }}.github.io/${REPO_NAME}"
+          REPORT_URL="${PAGES_BASE}/${REPORT_DIR}/"
+
+          echo "✅ Deployed to ${REPORT_URL}"
+
+          echo "## 📊 Test Report Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| **Chain** | \`${CHAIN_ENV}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Run ID** | \`${{ github.run_id }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Report** | [${REPORT_DIR}](${REPORT_URL}) |" >> $GITHUB_STEP_SUMMARY

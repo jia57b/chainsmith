@@ -37,11 +37,12 @@ const ftConfig: FaultToleranceConfig = configData.testConfig?.faultTolerance ?? 
 
 describe('Consensus Fault Tolerance Tests', () => {
     let testBuilder: FaultToleranceTestBuilder;
+    let blockchain: any;
 
     before(async () => {
         const runtimeManager = new RuntimeManager();
         await runtimeManager.connectToChainFromConfigFile(configPath, envName);
-        const blockchain = runtimeManager.getChain(envName);
+        blockchain = runtimeManager.getChain(envName);
         if (!blockchain) {
             throw new Error(`Failed to connect to blockchain: ${envName}`);
         }
@@ -84,19 +85,28 @@ describe('Consensus Fault Tolerance Tests', () => {
     it('Consensus-FaultTolerance-02: test stop exactly 1/3 voting power', async function () {
         this.timeout(ftConfig.timeout);
 
+        // Calculate if we can exactly stop 1/3 voting power
+        const result = blockchain.selectValidatorsByVotingPower('exactly-one-third');
+        if (result.achievedVotingPower !== result.totalVotingPower / 3) {
+            console.log(
+                `\n⏭️  Skipping test: Cannot stop EXACTLY 1/3 voting power (Total: ${result.totalVotingPower}, Achieved: ${result.achievedVotingPower})`
+            );
+            this.skip();
+        }
+
         // BFT requires >2/3 online to progress
-        // With 4 validators (25% each), stopping 1 (25%) leaves 75% online
-        // 75% > 66.7%, so network should still progress
+        // If exactly 1/3 is stopped, exactly 2/3 remains online.
+        // 2/3 is NOT > 66.666...%, so the network should halt.
         await testBuilder
             .withTestName('Fault Tolerance: Stop Exactly 1/3 Voting Power')
             .withConfiguration({
-                'Target voting power': 'exactly 1/3 of total (1 validator)',
-                'Expected behavior': 'Network should progress (75% > 66.7% threshold)',
+                'Target voting power': 'exactly 1/3 of total',
+                'Expected behavior': 'Network should halt (exactly 66.6% remaining is not > 2/3 threshold)',
                 Timeout: `${ftConfig.timeout / 1000 / 60} minutes`,
             })
             .withFaultToleranceParameters({
                 scenario: 'exactly-one-third',
-                networkShouldProgress: true, // Network continues with 75% online
+                networkShouldProgress: false, // Network halts with EXACTLY 66.6% online
             })
             .initialize()
             .then(builder => builder.getValidatorsToStop())
