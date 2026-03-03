@@ -260,6 +260,8 @@ echo ""
 echo "📝 Step 9/9: Updating PERSISTENT_PEERS in .env..."
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# copy .env.sample to .env
+cp "${SCRIPT_DIR}/.env.sample" "${SCRIPT_DIR}/.env"
 ENV_FILE="${SCRIPT_DIR}/.env"
 
 if [ -f "$ENV_FILE" ]; then
