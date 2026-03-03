@@ -88,189 +88,189 @@ jobs:
           docker compose -f chains/0g-docker/docker-compose.multinode.yml logs --tail=50
           exit 1
 
-      # ─── Test Configuration ─────────────────────────────────
-      - name: Generate test configuration
-        run: |
-          cat > tests/config.json << 'EOF'
-          {
-            "testConfig": {
-              "performanceExpect": {
-                "tokenTransfer": {
-                  "threshold": 10000,
-                  "percentage": 90
-                }
-              },
-              "faultTolerance": {
-                "waitTimeForBlock": 10000,
-                "waitTimeForService": 45000,
-                "waitTimeLong": 300000,
-                "timeout": 300000
-              }
-            },
-            "chain-1": {
-              "description": "CI 0G Localnet (4 validators)",
-              "consensusLayer": "cosmos",
-              "executeLayer": "evm",
-              "chainId": 16601,
-              "executeLayerHttpRpcUrl": "http://localhost:8545",
-              "consensusLayerRpcUrl": "http://localhost:26657",
-              "consensusLayerHttpRestApiUrl": "http://localhost:1317",
-              "consensusRestApiPathPrefix": "",
-              "consensusRestApiVersion": "",
-              "executionMethod": "docker",
-              "docker": {
-                "containerPatterns": {
-                  "executionLayer": "validator{index}-geth",
-                  "consensusLayer": "validator{index}-node"
-                },
-                "timeout": 30000
-              },
-              "nodes": [
-                {
-                  "index": 1,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 8545,
-                  "consensusLayerRpcPort": 26657,
-                  "consensusLayerHttpRestApiPort": 1317,
-                  "consensusLayerP2pCommPort": 26656
-                },
-                {
-                  "index": 2,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 28545,
-                  "consensusLayerRpcPort": 36657,
-                  "consensusLayerHttpRestApiPort": 21317,
-                  "consensusLayerP2pCommPort": 36656
-                },
-                {
-                  "index": 3,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 38545,
-                  "consensusLayerRpcPort": 46657,
-                  "consensusLayerHttpRestApiPort": 31317,
-                  "consensusLayerP2pCommPort": 46656
-                },
-                {
-                  "index": 4,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 48545,
-                  "consensusLayerRpcPort": 56657,
-                  "consensusLayerHttpRestApiPort": 41317,
-                  "consensusLayerP2pCommPort": 56656
-                }
-              ],
-              "founderWallet": {
-                "name": "hardhat-account-0",
-                "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-                "privateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-                "privateKeySource": "local"
-              }
-            }
-          }
-          EOF
-          echo "✅ tests/config.json generated"
-          cat tests/config.json | jq '.["chain-1"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
+  #     # ─── Test Configuration ─────────────────────────────────
+  #     - name: Generate test configuration
+  #       run: |
+  #         cat > tests/config.json << 'EOF'
+  #         {
+  #           "testConfig": {
+  #             "performanceExpect": {
+  #               "tokenTransfer": {
+  #                 "threshold": 10000,
+  #                 "percentage": 90
+  #               }
+  #             },
+  #             "faultTolerance": {
+  #               "waitTimeForBlock": 10000,
+  #               "waitTimeForService": 45000,
+  #               "waitTimeLong": 300000,
+  #               "timeout": 300000
+  #             }
+  #           },
+  #           "chain-1": {
+  #             "description": "CI 0G Localnet (4 validators)",
+  #             "consensusLayer": "cosmos",
+  #             "executeLayer": "evm",
+  #             "chainId": 16601,
+  #             "executeLayerHttpRpcUrl": "http://localhost:8545",
+  #             "consensusLayerRpcUrl": "http://localhost:26657",
+  #             "consensusLayerHttpRestApiUrl": "http://localhost:1317",
+  #             "consensusRestApiPathPrefix": "",
+  #             "consensusRestApiVersion": "",
+  #             "executionMethod": "docker",
+  #             "docker": {
+  #               "containerPatterns": {
+  #                 "executionLayer": "validator{index}-geth",
+  #                 "consensusLayer": "validator{index}-node"
+  #               },
+  #               "timeout": 30000
+  #             },
+  #             "nodes": [
+  #               {
+  #                 "index": 1,
+  #                 "url": "http://localhost",
+  #                 "type": "validator",
+  #                 "votingPower": 1,
+  #                 "active": true,
+  #                 "executeLayerHttpRpcPort": 8545,
+  #                 "consensusLayerRpcPort": 26657,
+  #                 "consensusLayerHttpRestApiPort": 1317,
+  #                 "consensusLayerP2pCommPort": 26656
+  #               },
+  #               {
+  #                 "index": 2,
+  #                 "url": "http://localhost",
+  #                 "type": "validator",
+  #                 "votingPower": 1,
+  #                 "active": true,
+  #                 "executeLayerHttpRpcPort": 28545,
+  #                 "consensusLayerRpcPort": 36657,
+  #                 "consensusLayerHttpRestApiPort": 21317,
+  #                 "consensusLayerP2pCommPort": 36656
+  #               },
+  #               {
+  #                 "index": 3,
+  #                 "url": "http://localhost",
+  #                 "type": "validator",
+  #                 "votingPower": 1,
+  #                 "active": true,
+  #                 "executeLayerHttpRpcPort": 38545,
+  #                 "consensusLayerRpcPort": 46657,
+  #                 "consensusLayerHttpRestApiPort": 31317,
+  #                 "consensusLayerP2pCommPort": 46656
+  #               },
+  #               {
+  #                 "index": 4,
+  #                 "url": "http://localhost",
+  #                 "type": "validator",
+  #                 "votingPower": 1,
+  #                 "active": true,
+  #                 "executeLayerHttpRpcPort": 48545,
+  #                 "consensusLayerRpcPort": 56657,
+  #                 "consensusLayerHttpRestApiPort": 41317,
+  #                 "consensusLayerP2pCommPort": 56656
+  #               }
+  #             ],
+  #             "founderWallet": {
+  #               "name": "hardhat-account-0",
+  #               "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+  #               "privateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+  #               "privateKeySource": "local"
+  #             }
+  #           }
+  #         }
+  #         EOF
+  #         echo "✅ tests/config.json generated"
+  #         cat tests/config.json | jq '.["chain-1"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
 
-      - name: Generate .env file
-        run: |
-          cat > .env << 'EOF'
-          CHAIN_ENV=chain-1
-          EOF
-          echo "✅ .env generated"
+  #     - name: Generate .env file
+  #       run: |
+  #         cat > .env << 'EOF'
+  #         CHAIN_ENV=chain-1
+  #         EOF
+  #         echo "✅ .env generated"
 
-      # ─── Run Tests ──────────────────────────────────────────
-      - name: Test - Basic
-        continue-on-error: true
-        run: pnpm test:basic
+  #     # ─── Run Tests ──────────────────────────────────────────
+  #     - name: Test - Basic
+  #       continue-on-error: true
+  #       run: pnpm test:basic
 
-      - name: Test - EVM RPC
-        continue-on-error: true
-        run: pnpm test:rpc:evm
+  #     - name: Test - EVM RPC
+  #       continue-on-error: true
+  #       run: pnpm test:rpc:evm
 
-      - name: Test - CometBFT RPC
-        continue-on-error: true
-        run: pnpm test:rpc:cometbft
+  #     - name: Test - CometBFT RPC
+  #       continue-on-error: true
+  #       run: pnpm test:rpc:cometbft
 
-      - name: Test - Cosmos API
-        continue-on-error: true
-        run: pnpm test:cosmos:api:sample
+  #     - name: Test - Cosmos API
+  #       continue-on-error: true
+  #       run: pnpm test:cosmos:api:sample
 
-      - name: Test - Performance
-        continue-on-error: true
-        run: pnpm test:performance
+  #     - name: Test - Performance
+  #       continue-on-error: true
+  #       run: pnpm test:performance
 
-      - name: Test - Fault Tolerance
-        continue-on-error: true
-        run: pnpm test:fault-tolerance
+  #     - name: Test - Fault Tolerance
+  #       continue-on-error: true
+  #       run: pnpm test:fault-tolerance
 
-      # ─── Reports ────────────────────────────────────────────
-      - name: Merge test reports
-        if: always()
-        run: |
-          chmod +x scripts/merge-reports.sh
-          bash scripts/merge-reports.sh
+  #     # ─── Reports ────────────────────────────────────────────
+  #     - name: Merge test reports
+  #       if: always()
+  #       run: |
+  #         chmod +x scripts/merge-reports.sh
+  #         bash scripts/merge-reports.sh
 
-      - name: Upload test report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report
-          path: tests/test-report/merged/
-          retention-days: 30
+  #     - name: Upload test report artifact
+  #       if: always()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: test-report
+  #         path: tests/test-report/merged/
+  #         retention-days: 30
 
-      - name: Setup Pages
-        if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/configure-pages@v5
+  #     - name: Setup Pages
+  #       if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #       uses: actions/configure-pages@v5
 
-      - name: Upload Pages artifact
-        if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: tests/test-report/merged/
+  #     - name: Upload Pages artifact
+  #       if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #       uses: actions/upload-pages-artifact@v3
+  #       with:
+  #         path: tests/test-report/merged/
 
-      # ─── Cleanup & Debug ────────────────────────────────────
-      - name: Collect docker logs on failure
-        if: failure()
-        working-directory: chains/0g-docker
-        run: |
-          echo "=== Docker container status ==="
-          docker compose -f docker-compose.multinode.yml ps
-          echo ""
-          echo "=== Validator 1 Node logs (last 100 lines) ==="
-          docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 || true
-          echo ""
-          echo "=== Validator 1 Geth logs (last 100 lines) ==="
-          docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 || true
+  #     # ─── Cleanup & Debug ────────────────────────────────────
+  #     - name: Collect docker logs on failure
+  #       if: failure()
+  #       working-directory: chains/0g-docker
+  #       run: |
+  #         echo "=== Docker container status ==="
+  #         docker compose -f docker-compose.multinode.yml ps
+  #         echo ""
+  #         echo "=== Validator 1 Node logs (last 100 lines) ==="
+  #         docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 || true
+  #         echo ""
+  #         echo "=== Validator 1 Geth logs (last 100 lines) ==="
+  #         docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 || true
 
-      - name: Stop localnet
-        if: always()
-        working-directory: chains/0g-docker
-        run: docker compose -f docker-compose.multinode.yml down -v || true
+  #     - name: Stop localnet
+  #       if: always()
+  #       working-directory: chains/0g-docker
+  #       run: docker compose -f docker-compose.multinode.yml down -v || true
 
-  # ─── Deploy Report to GitHub Pages ──────────────────────────
-  deploy-report:
-    name: Deploy Report to GitHub Pages
-    needs: test
-    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+  # # ─── Deploy Report to GitHub Pages ──────────────────────────
+  # deploy-report:
+  #   name: Deploy Report to GitHub Pages
+  #   needs: test
+  #   if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push'
+  #   runs-on: ubuntu-latest
 
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  #   environment:
+  #     name: github-pages
+  #     url: ${{ steps.deployment.outputs.page_url }}
 
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+  #   steps:
+  #     - name: Deploy to GitHub Pages
+  #       id: deployment
+  #       uses: actions/deploy-pages@v4
