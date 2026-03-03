@@ -1,0 +1,339 @@
+services:
+  node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/node:${NODE_TAG:-v2.0.4}
+    build:
+      dockerfile: docker/node/Dockerfile
+      context: .
+      args:
+        - NODE_TAG=${NODE_TAG:-v2.0.4}
+    restart: unless-stopped
+    profiles:
+      - node
+    working_dir: /home/zerog
+    networks:
+      og:
+    environment:
+      - GOGC=${NODE_GOGC:-900}
+      - GOMEMLIMIT=${NODE_GOMEMLIMIT:-40GiB}
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      run
+      start
+      --rpc.laddr "tcp://0.0.0.0:26657"
+      --chaincfg.chain-spec "devnet"
+      --chaincfg.kzg.trusted-setup-path=/home/zerog/.0gchain/config/kzg-trusted-setup.json
+      --chaincfg.engine.jwt-secret-path=/home/zerog/.0gchain/config/jwt-secret.hex
+      --chaincfg.engine.rpc-dial-url "http://geth:8551"
+      --chaincfg.kzg.implementation=crate-crypto/go-kzg-4844
+      --chaincfg.block-store-service.enabled
+      --chaincfg.node-api.enabled
+      --chaincfg.node-api.logging
+      --chaincfg.node-api.address "0.0.0.0:3500"
+      --pruning=nothing
+      --home "/home/zerog/.0gchain"
+      --chaincfg.engine.rpc-dial-url "http://geth:8551"
+      --chaincfg.logger.log-level ${NODE_LOG_LEVEL:-info}
+      --proxy_app "tcp://0.0.0.0:26658"
+      --p2p.laddr "tcp://0.0.0.0:26656"
+      --p2p.seeds ${SEEDS}
+      --p2p.external_address ${EXTERNAL_IP}:${P2P_PORT}
+      --p2p.persistent_peers ${PERSISTENT_PEERS:-""}
+
+    volumes:
+      - type: bind
+        source: ./configs/node/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: node_data
+        target: /home/zerog/.0gchain/data
+      - type: volume
+        source: node_config
+        target: /home/zerog/.0gchain/config
+      - type: volume
+        source: node_keyring
+        target: /home/zerog/.0gchain/keyring-test
+    ports:
+      - "${P2P_PORT}:26656" # p2p
+      - "${RPC_PORT}:26657"
+      - "${LCD_PORT}:1317"
+  geth:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/geth:${NODE_TAG:-v2.0.4}
+    build:
+      dockerfile: docker/geth/Dockerfile
+      context: .
+      args:
+        - NODE_TAG=${NODE_TAG:-v2.0.4}
+    restart: unless-stopped
+    profiles:
+      - node
+    working_dir: /home/zerog
+    networks:
+      og:
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      --config geth-config.toml
+      --nat stun:${EXTERNAL_IP}:${P2P_PORT}
+      --bootnodes ${GETH_BOOT_NODES:-enode://de7b86d8ac452b1413983049c20eafa2ea0851a3219c2cc12649b971c1677bd83fe24c5331e078471e52a94d95e8cde84cb9d866574fec957124e57ac6056699@8.218.88.60:30303}
+      --datadir /home/zerog/geth_home
+      --networkid 16601
+    volumes:
+      - type: bind
+        source: ./configs/geth/init.sh
+        target: /init.sh
+        read_only: true
+      - type: volume
+        source: geth_data
+        target: /home/zerog/geth_home
+    ports:
+      - "${EVM_JSON_RPC_PORT}:8545"
+  storage-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/storage-node:${STORAGE_NODE_TAG:-v1.1.0}
+    build:
+      dockerfile: docker/storage/Dockerfile
+      context: .
+      args:
+        - STORAGE_NODE_TAG=${STORAGE_NODE_TAG:-v1.1.0}
+    environment:
+      - STORAGE_NETWORK_BOOT_NODES=${STORAGE_NETWORK_BOOT_NODES:-["/ip4/47.251.117.133/udp/1234/p2p/16Uiu2HAmTVDGNhkHD98zDnJxQWu3i1FL1aFYeh9wiQTNu4pDCgps","/ip4/47.76.61.226/udp/1234/p2p/16Uiu2HAm2k6ua2mGgvZ8rTMV8GhpW71aVzkQWy7D37TTDuLCpgmX","/ip4/47.251.79.83/udp/1234/p2p/16Uiu2HAkvJYQABP1MdvfWfUZUzGLx1sBSDZ2AT92EFKcMCCPVawV", "/ip4/47.238.87.44/udp/1234/p2p/16Uiu2HAmFGsLoajQdEds6tJqsLX7Dg8bYd2HWR4SbpJUut4QXqCj", "/ip4/47.251.78.104/udp/1234/p2p/16Uiu2HAmSe9UWdHrqkn2mKh99b9DwYZZcea6krfidtU3e5tiHiwN", "/ip4/47.76.30.235/udp/1234/p2p/16Uiu2HAm5tCqwGtXJemZqBhJ9JoQxdDgkWYavfCziaqaAYkGDSfU"]}
+      - STORAGE_LOG_CONTRACT_ADDRESS=${STORAGE_LOG_CONTRACT_ADDRESS:-0xbD75117F80b4E22698D0Cd7612d92BDb8eaff628} #A.K.A flow contract
+      - STORAGE_MINE_CONTRACT_ADDRESS=${STORAGE_MINE_CONTRACT_ADDRESS:-0x3A0d1d67497Ad770d6f72e7f4B8F0BAbaa2A649C}
+      - STORAGE_REWARD_CONTRACT_ADDRESS=${STORAGE_REWARD_CONTRACT_ADDRESS:-0xd3D4D91125D76112AE256327410Dd0414Ee08Cb4}
+      - STORAGE_MARKET_CONTRACT_ADDRESS=${STORAGE_MARKET_CONTRACT_ADDRESS:-0x53191725d260221bBa307D8EeD6e2Be8DD265e19}
+      - STORAGE_LOG_SYNC_START_BLOCK_NUMBER=${STORAGE_LOG_SYNC_START_BLOCK_NUMBER:-326165}
+      - STORAGE_LOG_CONFIGS=${STORAGE_LOG_CONFIGS:-info,hyper=info,h2=info,rpc=info,discv5=info,jsonrpsee_http_server=info,multistream_select=info,libp2p_core=info,libp2p_gossipsub=info}
+    restart: unless-stopped
+    working_dir: /home/zerog
+    profiles:
+      - storage
+    networks:
+      og:
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    volumes:
+      - type: volume
+        source: storage_data
+        target: /home/zerog
+      - type: volume
+        source: storage_config
+        target: /config
+    ports:
+      - "${STORAGE_NETWORK_ENR_TCP_PORT}:${STORAGE_NETWORK_ENR_TCP_PORT:-1}" # libp2p
+      - "${STORAGE_NETWORK_ENR_UDP_PORT}:${STORAGE_NETWORK_ENR_UDP_PORT:-1}/udp" # discovery
+      - "${STORAGE_RPC_LISTEN_PORT}:5678" # rpc server port
+  storage-cli:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/storage-cli:${STORAGE_CLI_TAG:-v0.6.9}
+    build:
+      dockerfile: docker/storage-cli/Dockerfile
+      context: .
+      args:
+        - STORAGE_CLI_TAG=${STORAGE_CLI_TAG:-v0.6.9}
+    environment:
+      - STORAGE_LOG_CONTRACT_ADDRESS=${STORAGE_LOG_CONTRACT_ADDRESS:-0xbD2C3F0E65eDF5582141C35969d66e34629cC768} #A.K.A flow contract
+      - BLOCKCHAIN_RPC_ENDPOINT=${STORAGE_BLOCKCHAIN_RPC_ENDPOINT:-http://node:8545}
+      - STORAGE_NODE_RPC_ENDPOINT=${STORAGE_NODE_RPC_ENDPOINT:-http://storage-node:5678}
+      - STORAGE_MINER_PRIVATE_KEY=${STORAGE_MINER_PRIVATE_KEY:-0x}
+      - INTERVAL=${STORAGE_CLI_MAKE_TX_INTERVAL:-60}
+    restart: no
+    working_dir: /home/zerog
+    profiles:
+      - storage-cli
+    networks:
+      og:
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+  kv-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/kv-node:${KV_NODE_TAG:-v1.4.0}
+    build:
+      dockerfile: docker/kv/Dockerfile
+      context: .
+      args:
+        - KV_NODE_TAG=${KV_NODE_TAG:-v1.4.0}
+    environment:
+      - KV_LOG_CONTRACT_ADDRESS=${KV_LOG_CONTRACT_ADDRESS:-0xbD75117F80b4E22698D0Cd7612d92BDb8eaff628} #A.K.A flow contract
+      - KV_LOG_SYNC_START_BLOCK_NUMBER=${KV_LOG_SYNC_START_BLOCK_NUMBER:-326165}
+      - KV_LOG_CONFIGS=${KV_LOG_CONFIGS:-info,hyper=info,h2=info}
+    restart: unless-stopped
+    user: zerog
+    working_dir: /home/zerog
+    profiles:
+      - kv
+      - da-client
+    networks:
+      og:
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    volumes:
+      - type: volume
+        source: kv_data
+        target: /home/zerog
+      - type: volume
+        source: kv_config
+        target: /config
+    ports:
+      - "${KV_RPC_LISTEN_PORT}:6789" # kv rpc server port
+  da-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/da-node:${DA_NODE_TAG:-494205bbc178b9e7abd3a9f47041c4784d8fe555}
+    build:
+      dockerfile: docker/da-node/Dockerfile
+      context: .
+      args:
+        - DA_NODE_TAG=${DA_NODE_TAG:-494205bbc178b9e7abd3a9f47041c4784d8fe555}
+    environment:
+      - DA_NODE_LOG_LEVEL=${DA_NODE_LOG_LEVEL:-info}
+      - DA_NODE_ETH_RPC_ENDPOINT=${DA_NODE_ETH_RPC_ENDPOINT}
+      - DA_NODE_SOCKET_ADDR=${DA_NODE_SOCKET_ADDR}
+      - DA_NODE_SOCKET_PORT=${DA_NODE_SOCKET_PORT}
+      - DA_NODE_ENTRANCE_CONTRACT=${DA_NODE_ENTRANCE_CONTRACT:-0xE75A073dA5bb7b0eC622170Fd268f35E675a957B}
+      - DA_NODE_START_BLOCK_NUMBER=${DA_NODE_START_BLOCK_NUMBER:-326165}
+      - DA_NODE_SIGNER_BLS_PRIVATE_KEY=${DA_NODE_SIGNER_BLS_PRIVATE_KEY}
+      - DA_NODE_SIGNER_ETH_PRIVATE_KEY=${DA_NODE_SIGNER_ETH_PRIVATE_KEY}
+      - DA_NODE_MINER_ETH_PRIVATE_KEY=${DA_NODE_MINER_ETH_PRIVATE_KEY}
+      - DA_NODE_ENABLE_DAS=${DA_NODE_ENABLE_DAS:-true}
+    ports:
+      - "${DA_NODE_SOCKET_PORT}:34000" # grpc listen port
+    restart: unless-stopped
+    user: zerog
+    working_dir: /home/zerog
+    profiles:
+      - da
+      - da-node
+    networks:
+      og:
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    volumes:
+      - type: volume
+        source: da_node_data
+        target: /home/zerog
+      - type: volume
+        source: da_node_config
+        target: /config
+  da-client:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/da-client:${DA_CLIENT_TAG:-f4b1465}
+    build:
+      dockerfile: docker/da-client/Dockerfile
+      context: .
+      args:
+        - DA_CLIENT_TAG=${DA_CLIENT_TAG:-f4b1465}
+    ports:
+      - "${DA_CLIENT_LISTEN_PORT}:51001" # grpc listen port
+    restart: unless-stopped
+    user: zerog
+    working_dir: /home/zerog
+    profiles:
+      - da
+      - da-client
+    networks:
+      og:
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    volumes:
+      - type: volume
+        source: kv_data
+        target: /kv
+    depends_on:
+      - kv-node
+    command: |
+      --chain.rpc ${DA_CLIENT_ETH_RPC_ENDPOINT}
+      --chain.private-key ${DA_CLIENT_PRIVATE_KEY}
+      --chain.receipt-wait-rounds 180
+      --chain.receipt-wait-interval 1s
+      --chain.gas-limit 2000000
+      --combined-server.use-memory-db
+      --combined-server.storage.kv-db-path /kv
+      --combined-server.storage.time-to-expire 2592000
+      --disperser-server.grpc-port 51001
+      --batcher.da-entrance-contract 0xE75A073dA5bb7b0eC622170Fd268f35E675a957B
+      --batcher.da-signers-contract 0x0000000000000000000000000000000000001000
+      --batcher.finalizer-interval 20s
+      --batcher.confirmer-num 3
+      --batcher.max-num-retries-for-sign 3
+      --batcher.finalized-block-count 50
+      --batcher.batch-size-limit 500
+      --batcher.encoding-interval 3s
+      --batcher.encoding-request-queue-size 1
+      --batcher.pull-interval 10s
+      --batcher.signing-interval 3s
+      --batcher.signed-pull-interval 20s
+      --encoder-socket ${DA_CLIENT_ENCODER_SOCKET}
+      --encoding-timeout 300s
+      --signing-timeout 60s
+      --chain-read-timeout 12s
+      --chain-write-timeout 13s
+      --combined-server.log.level-file trace
+      --combined-server.log.level-std  trace
+
+  alignment-node:
+    image: ${ZG_DOCKER_IMAGE_REGISTRY:-ghcr.io/emberstake/0g-docker}/alignment:${ALIGNMENT_NODE_TAG:-v1.0.0}
+    build:
+      dockerfile: docker/alignment-node/Dockerfile
+      context: .
+      args:
+        - ALIGNMENT_NODE_TAG=${ALIGNMENT_NODE_TAG:-v1.0.0}
+    restart: unless-stopped
+    profiles:
+      - alignment
+    working_dir: /home/zerog
+    networks:
+      og:
+    environment:
+      - ALIGNMENT_NODE_RPC=${ALIGNMENT_NODE_RPC:-https://arb1.arbitrum.io/rpc}
+      - ZG_ALIGNMENT_NODE_LOG_LEVEL=debug
+      - ZG_ALIGNMENT_NODE_SERVICE_IP=http://${EXTERNAL_IP}:${ALIGNMENT_NODE_PORT}
+      - ZG_ALIGNMENT_NODE_SERVICE_PRIVATEKEY=${ALIGNMENT_NODE_PRIVATE_KEY}
+    env_file:
+      - .env
+    logging:
+      options:
+        max-size: "12m"
+        max-file: "5"
+    command: >
+      start --mainnet
+
+    volumes:
+      - type: bind
+        source: ./configs/alignment-node/init.sh
+        target: /init.sh
+        read_only: true
+    ports:
+      - "${ALIGNMENT_NODE_PORT}:${ALIGNMENT_NODE_PORT:-34567}"
+
+volumes:
+  node_config:
+  node_data:
+  node_keyring:
+  geth_data:
+  storage_data:
+  storage_config:
+  kv_data:
+  kv_config:
+  da_node_data:
+  da_node_config:
+  da_encoder_config:
+networks:
+  og:
