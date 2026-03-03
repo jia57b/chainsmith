@@ -3,16 +3,24 @@ import { Blockchain } from '../../core/Blockchain';
 import { NodeType, IBlockchainNode } from '../../blockchain/types';
 import { SSHManager, NodeConfig } from '../../infrastructure/nodes';
 import { DockerManager } from '../../infrastructure/docker';
-import { assertConsistentNodeResponses, assertNodesDisconnected } from '../../utils/test-helpers';
+import { assertConsistentNodeResponses } from '../../utils/test-helpers';
 import { Config } from '../../utils/common';
 
-// Test configuration (using Config.test constants)
-const FAULT_TOLERANCE_CONFIG = {
-    username: 'ubuntu',
-    waitTimeForBlock: Config.test.waitTimeForBlock,
-    waitTimeForService: Config.test.waitTimeForService,
-    waitTimeLong: Config.test.waitTimeLong,
-    timeout: 300000, // 5 minutes timeout
+/**
+ * Fault tolerance test timing configuration
+ */
+export interface FaultToleranceConfig {
+    waitTimeForBlock: number;
+    waitTimeForService: number;
+    waitTimeLong: number;
+    timeout: number;
+}
+
+const DEFAULT_FT_CONFIG: FaultToleranceConfig = {
+    waitTimeForBlock: 10000,
+    waitTimeForService: 45000,
+    waitTimeLong: 300000,
+    timeout: 300000,
 };
 
 // Block number request template
@@ -30,6 +38,7 @@ const BLOCK_NUM_REQUEST = Config.test.blockNumRequest;
  */
 export class FaultToleranceTestBuilder {
     private blockchain: Blockchain;
+    private ftConfig: FaultToleranceConfig;
     private stoppedValidators: number[] = []; // Changed from string[] to number[] for node indices
     private testResults: any[] = [];
     private startTime: number = 0;
@@ -41,8 +50,9 @@ export class FaultToleranceTestBuilder {
     private blockNumbers: Map<string, number> = new Map();
     private networkStatus: Map<string, boolean> = new Map();
 
-    constructor(blockchain: Blockchain) {
+    constructor(blockchain: Blockchain, config?: Partial<FaultToleranceConfig>) {
         this.blockchain = blockchain;
+        this.ftConfig = { ...DEFAULT_FT_CONFIG, ...config };
     }
 
     /**
@@ -326,7 +336,7 @@ export class FaultToleranceTestBuilder {
 
             // Wait for block progression
             console.log(`   ⏳ Waiting for block progression...`);
-            await new Promise(resolve => setTimeout(resolve, FAULT_TOLERANCE_CONFIG.waitTimeForBlock));
+            await new Promise(resolve => setTimeout(resolve, this.ftConfig.waitTimeForBlock));
 
             // Check block numbers after waiting
             const afterBlockResults = await this.blockchain.getMultipleNodeResponses(
@@ -438,19 +448,68 @@ export class FaultToleranceTestBuilder {
     }
 
     /**
-     * Test transaction sending
+     * Test transaction sending and confirmation
+     * When networkShouldProgress = true: transaction should be sent AND confirmed on-chain
+     * When networkShouldProgress = false: transaction can be sent to mempool, but should NOT be confirmed
      */
     private async testTransactionSending(): Promise<void> {
         try {
             console.log(`   📤 Testing transaction sending...`);
-            await this.blockchain.sendSimpleTransaction(
+            const result = await this.blockchain.sendSimpleTransaction(
                 this.getTargetAccount(),
                 '0.01',
                 this.blockchain.founderWallet?.privateKey ?? ''
             );
-            console.log(`   ✅ Transaction sent successfully`);
-            this.networkStatus.set('transaction_sent', true);
-        } catch (error) {
+
+            if (!this.networkShouldProgress) {
+                // Network should be halted - try to wait for receipt, expect timeout
+                console.log(`   ⏳ Waiting for transaction confirmation (expecting timeout)...`);
+                try {
+                    const activeNode = this.blockchain.getActiveNotBootNodes()[0];
+                    const { ethers } = await import('ethers');
+                    const provider = new ethers.JsonRpcProvider(
+                        (activeNode as any).getExecuteLayerRpcUrl?.() ?? activeNode.url
+                    );
+                    // Wait for receipt with a short timeout (waitTimeForBlock)
+                    const receipt = await Promise.race([
+                        provider.waitForTransaction(result.hash, 1),
+                        new Promise<null>((_, reject) =>
+                            setTimeout(
+                                () => reject(new Error('Transaction confirmation timeout')),
+                                this.ftConfig.waitTimeForBlock
+                            )
+                        ),
+                    ]);
+                    if (receipt) {
+                        // Transaction was confirmed - unexpected when network should halt
+                        console.error(`   ❌ Transaction was confirmed unexpectedly (block: ${receipt.blockNumber})`);
+                        this.networkStatus.set('transaction_sent', true);
+                        throw new Error('Transaction confirmed but network should be halted');
+                    }
+                } catch (error: any) {
+                    if (
+                        error.message?.includes('timeout') ||
+                        error.message?.includes('Transaction confirmation timeout')
+                    ) {
+                        console.log(`   ✅ Transaction failed as expected (network halted)`);
+                        this.networkStatus.set('transaction_sent', false);
+                    } else {
+                        throw error;
+                    }
+                }
+            } else {
+                // Network should be progressing - transaction sent to mempool is sufficient
+                console.log(`   ✅ Transaction sent successfully (hash: ${result.hash.substring(0, 18)}...)`);
+                this.networkStatus.set('transaction_sent', true);
+            }
+        } catch (error: any) {
+            if (
+                !this.networkShouldProgress &&
+                (error.message?.includes('timeout') || error.message?.includes('Transaction confirmation timeout'))
+            ) {
+                // Already handled above
+                return;
+            }
             if (this.networkShouldProgress) {
                 console.error(`   ❌ Transaction failed (unexpected): ${error}`);
                 this.networkStatus.set('transaction_sent', false);
@@ -469,13 +528,16 @@ export class FaultToleranceTestBuilder {
         console.log(`\n🚫 Verifying stopped validators are not accessible...`);
 
         try {
-            // Convert node indices to IP addresses for connectivity check
-            const stoppedValidatorIPs = this.stoppedValidators.map(validatorIndex => {
+            for (const validatorIndex of this.stoppedValidators) {
                 const node = this.blockchain.getNode(validatorIndex);
-                return node.url.replace(/^https?:\/\//, ''); // Extract IP from URL
-            });
-
-            await assertNodesDisconnected(this.blockchain, stoppedValidatorIPs);
+                const connectivity = await (node as any).checkConnectivity();
+                const nodeUrl = (node as any).getExecuteLayerRpcUrl?.() ?? node.url;
+                console.log(
+                    `   Node-${validatorIndex} (${nodeUrl}): evm=${connectivity.evmConnected}, consensus=${connectivity.consensusConnected}`
+                );
+                expect(connectivity.evmConnected).to.be.false;
+                expect(connectivity.consensusConnected).to.be.false;
+            }
             console.log(`   ✅ All stopped validators are inaccessible as expected`);
 
             this.testResults.push({
@@ -500,21 +562,21 @@ export class FaultToleranceTestBuilder {
      * Wait for long period (5 minutes)
      */
     async waitForLongPeriod(): Promise<FaultToleranceTestBuilder> {
-        const waitMinutes = FAULT_TOLERANCE_CONFIG.waitTimeLong / 1000 / 60;
+        const waitMinutes = this.ftConfig.waitTimeLong / 1000 / 60;
         const startTime = new Date();
-        const endTime = new Date(startTime.getTime() + FAULT_TOLERANCE_CONFIG.waitTimeLong);
+        const endTime = new Date(startTime.getTime() + this.ftConfig.waitTimeLong);
         const formatTime = (d: Date) => d.toLocaleTimeString('en-US', { hour12: false });
 
         console.log(`\n⏳ Waiting for long period (${waitMinutes} minutes)...`);
         console.log(`   🕐 Start: ${formatTime(startTime)} → End: ${formatTime(endTime)}`);
 
-        await new Promise(resolve => setTimeout(resolve, FAULT_TOLERANCE_CONFIG.waitTimeLong));
+        await new Promise(resolve => setTimeout(resolve, this.ftConfig.waitTimeLong));
 
         console.log(`   ✅ ${waitMinutes}-minute wait completed at ${formatTime(new Date())}`);
         this.testResults.push({
             step: 'wait_long_period',
             success: true,
-            duration: FAULT_TOLERANCE_CONFIG.waitTimeLong,
+            duration: this.ftConfig.waitTimeLong,
         });
 
         return this;
@@ -524,7 +586,7 @@ export class FaultToleranceTestBuilder {
      * Restart validators
      */
     async restartValidators(): Promise<FaultToleranceTestBuilder> {
-        const stepNumber = this.testName.includes('wait for 5 minutes') ? 6 : 5;
+        const stepNumber = this.testName.includes('wait for') ? 6 : 5;
         console.log(`\n🔄 Step ${stepNumber}: Restarting ${this.stoppedValidators.length} validators...`);
         console.log(`   📋 Execution method: ${this.blockchain.executionMethod ?? 'none'}`);
 
@@ -556,7 +618,7 @@ export class FaultToleranceTestBuilder {
 
         // Wait for services to stabilize
         console.log(`   ⏳ Waiting for services to stabilize...`);
-        await new Promise(resolve => setTimeout(resolve, FAULT_TOLERANCE_CONFIG.waitTimeForService));
+        await new Promise(resolve => setTimeout(resolve, this.ftConfig.waitTimeForService));
 
         this.testResults.push({
             step: 'restart_validators',
@@ -575,7 +637,7 @@ export class FaultToleranceTestBuilder {
      * Check network status after restart
      */
     async checkNetworkStatusAfterRestart(): Promise<FaultToleranceTestBuilder> {
-        const stepNumber = this.testName.includes('wait for 5 minutes') ? 7 : 6;
+        const stepNumber = this.testName.includes('wait for') ? 7 : 6;
         console.log(`\n🔍 Step ${stepNumber}: Checking network status after restart...`);
 
         try {
@@ -587,7 +649,7 @@ export class FaultToleranceTestBuilder {
 
             // Wait for block progression
             console.log(`   ⏳ Waiting for block progression...`);
-            await new Promise(resolve => setTimeout(resolve, FAULT_TOLERANCE_CONFIG.waitTimeForBlock));
+            await new Promise(resolve => setTimeout(resolve, this.ftConfig.waitTimeForBlock));
 
             // Check block numbers after waiting
             const afterBlocks = await assertConsistentNodeResponses(this.blockchain, BLOCK_NUM_REQUEST, -1);

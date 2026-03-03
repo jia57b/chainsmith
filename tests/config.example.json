@@ -5,6 +5,12 @@
                 "threshold": 10000,
                 "percentage": 90
             }
+        },
+        "faultTolerance": {
+            "waitTimeForBlock": 10000,
+            "waitTimeForService": 45000,
+            "waitTimeLong": 300000,
+            "timeout": 300000
         }
     },
     "chain-1": {

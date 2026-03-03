@@ -112,7 +112,6 @@ export class Config {
         waitTimeForTx: 20000,
         waitTimeForService: 45000, // Start validator service
         waitTimeForBlockSync: 15000, // Block sync
-        waitTimeLong: 100000,
 
         // Common RPC requests
         blockNumRequest: {

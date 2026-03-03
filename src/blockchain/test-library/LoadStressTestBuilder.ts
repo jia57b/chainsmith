@@ -26,6 +26,7 @@ export class LoadStressTestBuilder {
     private testResults: any[] = [];
     private startTime: number = 0;
     private endTime: number = 0;
+    private confirmationEndTime: number = 0;
     private testName: string = '';
     private configuration: any = {};
     private loadStressConfig: LoadStressConfig;
@@ -386,6 +387,9 @@ export class LoadStressTestBuilder {
         this.testResults = await Promise.all(transactions);
         this.endTime = Date.now();
 
+        // Wait for on-chain confirmations
+        await this.waitForAllConfirmations();
+
         return this;
     }
 
@@ -410,8 +414,6 @@ export class LoadStressTestBuilder {
 
         console.log(`   Created ${batches.length} batches`);
 
-        const _successfulBatches = 0;
-        const _totalTransactions = 0;
         const allResults: any[] = [];
 
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
@@ -436,8 +438,6 @@ export class LoadStressTestBuilder {
 
             const batchResults = await Promise.all(batchTransactions);
             const successfulInBatch = batchResults.filter(result => result.success).length;
-            const _successfulBatches = successfulInBatch > 0 ? 1 : 0;
-            const _totalTransactions = successfulInBatch;
             allResults.push(...batchResults);
 
             console.log(`   ✅ Batch ${batchIndex + 1} completed: ${successfulInBatch}/${batch.length} successful`);
@@ -450,6 +450,9 @@ export class LoadStressTestBuilder {
 
         this.testResults = allResults;
         this.endTime = Date.now();
+
+        // Wait for on-chain confirmations
+        await this.waitForAllConfirmations();
 
         return this;
     }
@@ -468,6 +471,7 @@ export class LoadStressTestBuilder {
         this.startTime = Date.now();
 
         const allResults: any[] = [];
+        const provider = this.getProvider();
 
         for (const gasPrice of gasPrices) {
             console.log(`\n   --- Testing gas price: ${ethers.formatUnits(gasPrice, 'gwei')} Gwei ---`);
@@ -498,18 +502,51 @@ export class LoadStressTestBuilder {
             });
 
             const gasResults = await Promise.all(transactions);
-            const gasEndTime = Date.now();
-            const gasDuration = gasEndTime - gasStartTime;
+            const gasSubmissionEndTime = Date.now();
+            const submissionDuration = gasSubmissionEndTime - gasStartTime;
 
-            const successfulGasTransactions = gasResults.filter(result => result.success).length;
+            const successfulTxs = gasResults.filter(result => result.success);
+            const submissionRate = (successfulTxs.length / (submissionDuration / 1000)).toFixed(2);
+
+            // Wait for on-chain confirmations for this gas price round
+            console.log(`   ⏳ Waiting for ${successfulTxs.length} transactions to confirm...`);
+            const confirmPromises = successfulTxs.map(async (result: any) => {
+                try {
+                    const receipt = await provider.waitForTransaction(result.hash, 1, 60000);
+                    if (receipt) {
+                        result.blockNumber = receipt.blockNumber;
+                        result.confirmationTime = Date.now();
+                        result.gasUsed = receipt.gasUsed?.toString();
+                    }
+                } catch {
+                    // Receipt timeout - transaction may still confirm later
+                }
+            });
+            await Promise.all(confirmPromises);
+            const gasConfirmEndTime = Date.now();
+            const totalGasDuration = gasConfirmEndTime - gasStartTime;
+
+            const confirmedTxs = successfulTxs.filter((r: any) => r.blockNumber);
+            const unconfirmedCount = successfulTxs.length - confirmedTxs.length;
+            const confirmationRate =
+                confirmedTxs.length > 0 ? (confirmedTxs.length / (totalGasDuration / 1000)).toFixed(2) : 'N/A';
 
             console.log(`   Gas price ${ethers.formatUnits(gasPrice, 'gwei')} Gwei results:`);
-            console.log(`   - Successful transactions: ${successfulGasTransactions}/${this.wallets.length}`);
-            console.log(`   - Success rate: ${((successfulGasTransactions / this.wallets.length) * 100).toFixed(2)}%`);
-            console.log(`   - Duration: ${gasDuration}ms`);
+            console.log(`   - Sent: ${successfulTxs.length}/${this.wallets.length}`);
             console.log(
-                `   - Transactions per second: ${(successfulGasTransactions / (gasDuration / 1000)).toFixed(2)}`
+                `   - Confirmed: ${confirmedTxs.length}/${successfulTxs.length}${unconfirmedCount > 0 ? ` (⚠️ ${unconfirmedCount} unconfirmed)` : ''}`
             );
+            console.log(`   - Submission duration: ${submissionDuration}ms`);
+            console.log(`   - Total duration (incl. confirmation): ${totalGasDuration}ms`);
+            console.log(`   - Submission rate: ${submissionRate} tx/s`);
+            console.log(`   - Confirmation rate: ${confirmationRate} tx/s`);
+
+            // Block distribution for this gas price
+            if (confirmedTxs.length > 0) {
+                const blocks = confirmedTxs.map((r: any) => r.blockNumber).sort((a: number, b: number) => a - b);
+                const blockSpan = blocks[blocks.length - 1] - blocks[0] + 1;
+                console.log(`   - Block span: ${blocks[0]} → ${blocks[blocks.length - 1]} (${blockSpan} blocks)`);
+            }
 
             allResults.push(...gasResults);
 
@@ -521,6 +558,7 @@ export class LoadStressTestBuilder {
 
         this.testResults = allResults;
         this.endTime = Date.now();
+        this.confirmationEndTime = Date.now();
 
         return this;
     }
@@ -550,22 +588,24 @@ export class LoadStressTestBuilder {
         let transactionCount = 0;
         let successCount = 0;
         let failureCount = 0;
+        let batchCount = 0;
 
         // Ensure batchSize is within reasonable limits
         const actualBatchSize = Math.min(Math.max(1, batchSize), this.wallets.length);
         const actualInterval = Math.max(100, batchIntervalMs); // Minimum 100ms interval
 
-        console.log(`   📊 Starting sustained transaction sending...`);
-        console.log(`   ⏱️ Test will run for ${duration} minutes (${totalDuration}ms)`);
+        console.log(`   📊 Sustained transaction sending parameters:`);
+        console.log(`   ⏱️ Duration: ${duration} minutes (${totalDuration}ms)`);
         console.log(`   📦 Batch size: ${actualBatchSize} transactions per batch`);
         console.log(`   ⏱️ Batch interval: ${actualInterval}ms`);
-        console.log(`   🎯 Theoretical max TPS: ${(actualBatchSize * (1000 / actualInterval)).toFixed(2)}`);
+        // console.log(`   🎯 Theoretical max send rate: ${(actualBatchSize * (1000 / actualInterval)).toFixed(2)} tx/s`);
 
         const startTime = Date.now();
         const endTime = startTime + totalDuration;
 
         while (Date.now() < endTime) {
             const batchStartTime = Date.now();
+            batchCount++;
 
             // Send a batch of transactions concurrently
             const batchTransactions: Promise<any>[] = [];
@@ -591,7 +631,7 @@ export class LoadStressTestBuilder {
                     .catch((error: any) => {
                         transactionCount++;
                         failureCount++;
-                        console.error(`   ❌ Transaction failed (wallet ${walletIndex}): ${error}`);
+                        console.error(`   ❌ Send failed (wallet ${walletIndex}): ${error}`);
                         return {
                             success: false,
                             error: error instanceof Error ? error.message : String(error),
@@ -610,13 +650,13 @@ export class LoadStressTestBuilder {
             const batchEndTime = Date.now();
             const batchDuration = batchEndTime - batchStartTime;
 
-            if (transactionCount % (actualBatchSize * 5) === 0) {
+            if (batchCount % 5 === 0) {
                 // Log every 5 batches
                 const elapsed = Date.now() - startTime;
-                const actualTPS = (transactionCount / (elapsed / 1000)).toFixed(2);
-                const successRate = ((successCount / transactionCount) * 100).toFixed(2);
+                const elapsedSec = (elapsed / 1000).toFixed(1);
+                const sendRate = (transactionCount / (elapsed / 1000)).toFixed(2);
                 console.log(
-                    `   📈 Progress: ${transactionCount} transactions, ${actualTPS} TPS, ${successRate}% success rate, ${failureCount} failures`
+                    `   📈 [${elapsedSec}s] Sent: ${successCount}/${transactionCount} | Send rate: ${sendRate} tx/s | Failures: ${failureCount}`
                 );
             }
 
@@ -630,42 +670,111 @@ export class LoadStressTestBuilder {
         this.endTime = Date.now();
         this.testResults = allResults;
 
+        // Wait for on-chain confirmations
+        await this.waitForAllConfirmations();
+
         return this;
     }
 
     /**
-     * Analyze and report test results
+     * Wait for all successful transactions to be confirmed on-chain
+     * Updates testResults with blockNumber and confirmationTime
+     */
+    private async waitForAllConfirmations(): Promise<void> {
+        const successfulTxs = this.testResults.filter(r => r.success && r.hash);
+        if (successfulTxs.length === 0) {
+            return;
+        }
+
+        console.log(`\n   ⏳ Waiting for ${successfulTxs.length} transactions to be confirmed on-chain...`);
+        const provider = this.getProvider();
+        const confirmStartTime = Date.now();
+
+        const confirmationPromises = successfulTxs.map(async result => {
+            try {
+                const receipt = await provider.waitForTransaction(result.hash, 1, 60000);
+                if (receipt) {
+                    result.blockNumber = receipt.blockNumber;
+                    result.confirmationTime = Date.now();
+                    result.gasUsed = receipt.gasUsed?.toString();
+                }
+            } catch (error) {
+                console.warn(`   ⚠️ Failed to get receipt for ${result.hash}: ${error}`);
+            }
+        });
+
+        await Promise.all(confirmationPromises);
+        this.confirmationEndTime = Date.now();
+
+        const confirmedCount = successfulTxs.filter(r => r.blockNumber).length;
+        const confirmDuration = this.confirmationEndTime - confirmStartTime;
+        console.log(`   ✅ ${confirmedCount}/${successfulTxs.length} transactions confirmed (${confirmDuration}ms)`);
+    }
+
+    /**
+     * Analyze and report test results with multi-dimension TPS metrics
      *
      * @returns LoadStressTestBuilder for fluent chaining
      */
     analyzeResults(): LoadStressTestBuilder {
-        const duration = this.endTime - this.startTime;
+        const submissionDuration = this.endTime - this.startTime;
+        const totalDuration = (this.confirmationEndTime || this.endTime) - this.startTime;
         const successfulTransactions = this.testResults.filter(result => result.success);
         const failedTransactions = this.testResults.filter(result => !result.success);
-        const actualTPS = (this.testResults.length / (duration / 1000)).toFixed(2);
+        const confirmedTransactions = successfulTransactions.filter(r => r.blockNumber);
+
+        // Submission TPS: how fast transactions were sent to mempool
+        const submissionTPS = (this.testResults.length / (submissionDuration / 1000)).toFixed(2);
+        // Confirmation TPS: actual on-chain throughput (from first submit to last confirmation)
+        const confirmationTPS =
+            confirmedTransactions.length > 0
+                ? (confirmedTransactions.length / (totalDuration / 1000)).toFixed(2)
+                : 'N/A';
 
         console.log(`\n📊 Test Results Summary:`);
         console.log(`   Test: ${this.testName}`);
         console.log(`   Total transactions: ${this.testResults.length}`);
         console.log(`   Successful transactions: ${successfulTransactions.length}`);
+        console.log(`   Confirmed on-chain: ${confirmedTransactions.length}`);
+        const unconfirmedCount = successfulTransactions.length - confirmedTransactions.length;
+        if (unconfirmedCount > 0) {
+            console.log(`   ⚠️ Unconfirmed (receipt timeout): ${unconfirmedCount}`);
+        }
         console.log(`   Failed transactions: ${failedTransactions.length}`);
         console.log(
             `   Success rate: ${((successfulTransactions.length / this.testResults.length) * 100).toFixed(2)}%`
         );
-        console.log(`   Total duration: ${duration}ms (${(duration / 1000 / 60).toFixed(2)} minutes)`);
-        console.log(`   Actual TPS: ${actualTPS}`);
-        console.log(`   Average time per transaction: ${(duration / this.testResults.length).toFixed(2)}ms`);
 
-        if (successfulTransactions.length > 0) {
-            const avgBlockNumber =
-                successfulTransactions
-                    .filter(result => result.blockNumber)
-                    .reduce((sum, result) => sum + result.blockNumber, 0) /
-                successfulTransactions.filter(result => result.blockNumber).length;
+        console.log(`\n   ⏱️ Timing:`);
+        console.log(`   Submission duration: ${submissionDuration}ms (${(submissionDuration / 1000).toFixed(2)}s)`);
+        console.log(
+            `   Total duration (incl. confirmation): ${totalDuration}ms (${(totalDuration / 1000).toFixed(2)}s)`
+        );
 
-            if (!isNaN(avgBlockNumber)) {
-                console.log(`   Average block number: ${avgBlockNumber.toFixed(0)}`);
-            }
+        console.log(`\n   📈 TPS Metrics:`);
+        console.log(`   Submission TPS: ${submissionTPS} (send to mempool rate)`);
+        console.log(`   Confirmation TPS: ${confirmationTPS} (actual on-chain throughput)`);
+
+        // Block distribution analysis
+        if (confirmedTransactions.length > 0) {
+            const blockNumbers = confirmedTransactions.map(r => r.blockNumber).sort((a: number, b: number) => a - b);
+            const minBlock = blockNumbers[0];
+            const maxBlock = blockNumbers[blockNumbers.length - 1];
+            const blockSpan = maxBlock - minBlock + 1;
+            const avgTxsPerBlock = (confirmedTransactions.length / blockSpan).toFixed(2);
+
+            // Count transactions per block
+            const txsPerBlock = new Map<number, number>();
+            blockNumbers.forEach((block: number) => {
+                txsPerBlock.set(block, (txsPerBlock.get(block) ?? 0) + 1);
+            });
+
+            console.log(`\n   📦 Block Distribution:`);
+            console.log(`   Block range: ${minBlock} → ${maxBlock} (${blockSpan} blocks)`);
+            console.log(`   Avg transactions per block: ${avgTxsPerBlock}`);
+            txsPerBlock.forEach((count, block) => {
+                console.log(`   Block ${block}: ${count} transactions`);
+            });
         }
 
         return this;

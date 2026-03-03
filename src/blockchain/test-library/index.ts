@@ -4,7 +4,7 @@
 // across different blockchain operations and consensus mechanisms.
 
 export { StakingTestBuilder } from './StakingTestBuilder';
-export { FaultToleranceTestBuilder } from './FaultToleranceTestBuilder';
+export { FaultToleranceTestBuilder, type FaultToleranceConfig } from './FaultToleranceTestBuilder';
 export { LoadStressTestBuilder, LoadStressConfig } from './LoadStressTestBuilder';
 export { ConsensusTestBuilder } from './ConsensusTestBuilder';
 export { CosmosApiTestBuilder } from './CosmosApiTestBuilder';

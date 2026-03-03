@@ -1,8 +1,9 @@
 import '../../setup';
 import { RuntimeManager } from '../../src/core/RuntimeManager';
-import { FaultToleranceTestBuilder } from '../../src/blockchain/test-library';
+import { FaultToleranceTestBuilder, FaultToleranceConfig } from '../../src/blockchain/test-library';
 import { Config } from '../../src/utils/common';
 import path from 'path';
+import fs from 'fs';
 
 import chai from 'chai';
 import chaiAsPromised from 'chai-as-promised';
@@ -30,14 +31,9 @@ chai.use(chaiAsPromised);
 const configPath = path.join(__dirname, '../config.json');
 const envName = Config.envName;
 
-// Test configuration
-const FAULT_TOLERANCE_CONFIG = {
-    username: 'ubuntu',
-    waitTimeForBlock: Config.test.waitTimeForBlock,
-    waitTimeForService: Config.test.waitTimeForService,
-    waitTimeLong: Config.test.waitTimeLong,
-    timeout: 300000, // 5 minutes timeout
-};
+// Load fault tolerance config from config.json
+const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+const ftConfig: FaultToleranceConfig = configData.testConfig?.faultTolerance ?? {};
 
 describe('Consensus Fault Tolerance Tests', () => {
     let testBuilder: FaultToleranceTestBuilder;
@@ -49,10 +45,12 @@ describe('Consensus Fault Tolerance Tests', () => {
         if (!blockchain) {
             throw new Error(`Failed to connect to blockchain: ${envName}`);
         }
-        testBuilder = new FaultToleranceTestBuilder(blockchain);
+        testBuilder = new FaultToleranceTestBuilder(blockchain, ftConfig);
         console.log(`\n🔧 Fault Tolerance Test Configuration:`);
-        console.log(`   Username: ${FAULT_TOLERANCE_CONFIG.username}`);
-        console.log(`   Timeout: ${FAULT_TOLERANCE_CONFIG.timeout / 1000 / 60} minutes`);
+        console.log(`   Timeout: ${ftConfig.timeout / 1000 / 60} minutes`);
+        console.log(`   Wait for block: ${ftConfig.waitTimeForBlock / 1000}s`);
+        console.log(`   Wait for service: ${ftConfig.waitTimeForService / 1000}s`);
+        console.log(`   Wait long period: ${ftConfig.waitTimeLong / 1000 / 60} minutes`);
     });
 
     after(async () => {
@@ -60,14 +58,14 @@ describe('Consensus Fault Tolerance Tests', () => {
     });
 
     it('Consensus-FaultTolerance-01: test stop less than 1/3 voting power', async function () {
-        this.timeout(FAULT_TOLERANCE_CONFIG.timeout);
+        this.timeout(ftConfig.timeout);
 
         await testBuilder
             .withTestName('Fault Tolerance: Stop Less Than 1/3 Voting Power')
             .withConfiguration({
                 'Target voting power': 'less than 1/3 of total',
                 'Expected behavior': 'Network should progress',
-                Timeout: `${FAULT_TOLERANCE_CONFIG.timeout / 1000 / 60} minutes`,
+                Timeout: `${ftConfig.timeout / 1000 / 60} minutes`,
             })
             .withFaultToleranceParameters({
                 scenario: 'less-than-one-third',
@@ -84,7 +82,7 @@ describe('Consensus Fault Tolerance Tests', () => {
     });
 
     it('Consensus-FaultTolerance-02: test stop exactly 1/3 voting power', async function () {
-        this.timeout(FAULT_TOLERANCE_CONFIG.timeout);
+        this.timeout(ftConfig.timeout);
 
         // BFT requires >2/3 online to progress
         // With 4 validators (25% each), stopping 1 (25%) leaves 75% online
@@ -94,7 +92,7 @@ describe('Consensus Fault Tolerance Tests', () => {
             .withConfiguration({
                 'Target voting power': 'exactly 1/3 of total (1 validator)',
                 'Expected behavior': 'Network should progress (75% > 66.7% threshold)',
-                Timeout: `${FAULT_TOLERANCE_CONFIG.timeout / 1000 / 60} minutes`,
+                Timeout: `${ftConfig.timeout / 1000 / 60} minutes`,
             })
             .withFaultToleranceParameters({
                 scenario: 'exactly-one-third',
@@ -111,14 +109,14 @@ describe('Consensus Fault Tolerance Tests', () => {
     });
 
     it('Consensus-FaultTolerance-03: test stop more than 1/3 voting power', async function () {
-        this.timeout(FAULT_TOLERANCE_CONFIG.timeout);
+        this.timeout(ftConfig.timeout);
 
         await testBuilder
             .withTestName('Fault Tolerance: Stop More Than 1/3 Voting Power')
             .withConfiguration({
                 'Target voting power': 'more than 1/3 of total',
                 'Expected behavior': 'Network should halt',
-                Timeout: `${FAULT_TOLERANCE_CONFIG.timeout / 1000 / 60} minutes`,
+                Timeout: `${ftConfig.timeout / 1000 / 60} minutes`,
             })
             .withFaultToleranceParameters({
                 scenario: 'more-than-one-third',
@@ -134,16 +132,17 @@ describe('Consensus Fault Tolerance Tests', () => {
             .then(builder => builder.analyzeResults());
     });
 
-    it('Consensus-FaultTolerance-04: test stop less than 1/3 voting power and wait for 5 minutes', async function () {
-        this.timeout(FAULT_TOLERANCE_CONFIG.timeout * 2); // Extended timeout for 5-minute wait
+    it(`Consensus-FaultTolerance-04: test stop less than 1/3 voting power and wait for long period`, async function () {
+        this.timeout(ftConfig.timeout + ftConfig.waitTimeLong); // Extended timeout for long wait
 
+        const waitMinutes = ftConfig.waitTimeLong / 1000 / 60;
         await testBuilder
-            .withTestName('Fault Tolerance: Stop Less Than 1/3 Voting Power and wait for 5 minutes')
+            .withTestName(`Fault Tolerance: Stop Less Than 1/3 Voting Power and wait for ${waitMinutes} minutes`)
             .withConfiguration({
                 'Target voting power': 'less than 1/3 of total',
-                'Extended wait': '5 minutes',
+                'Extended wait': `${waitMinutes} minutes`,
                 'Expected behavior': 'Network should progress throughout',
-                Timeout: `${(FAULT_TOLERANCE_CONFIG.timeout * 2) / 1000 / 60} minutes`,
+                Timeout: `${(ftConfig.timeout + ftConfig.waitTimeLong) / 1000 / 60} minutes`,
             })
             .withFaultToleranceParameters({
                 scenario: 'less-than-one-third',

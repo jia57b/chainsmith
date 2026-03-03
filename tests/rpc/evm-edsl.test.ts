@@ -58,7 +58,13 @@ describe('EVM RPC Tests', () => {
         blockchain.nodes.forEach(node => {
             const status = node.active ? '✓' : '✗';
             const typeIcon = node.type === 'bootnode' ? '🔗' : '🖥️';
-            console.log(`   ${status} ${typeIcon} Node ${node.index}: ${node.url} (${node.type})`);
+            let nodeUrl = node.url;
+            try {
+                nodeUrl = node.getExecuteLayerRpcUrl();
+            } catch {
+                /* port not exposed */
+            }
+            console.log(`   ${status} ${typeIcon} Node ${node.index}: ${nodeUrl} (${node.type})`);
         });
 
         console.log('');
@@ -123,7 +129,7 @@ describe('EVM RPC Tests', () => {
 
                 before(async function () {
                     node = activeNodes[nodeSlot];
-                    console.log(`\n🔍 Testing Node ${node.index}: ${node.url}`);
+                    console.log(`\n🔍 Testing Node ${node.index}: ${node.getExecuteLayerRpcUrl()}`);
 
                     testBuilder = await EVMRpcTestBuilder.withTestContract(blockchain, {
                         contractAddress: Config.contractAddress,

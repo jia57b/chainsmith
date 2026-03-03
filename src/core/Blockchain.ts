@@ -458,7 +458,7 @@ export class Blockchain implements IBlockchain {
 
         switch (scenario) {
             case 'less-than-one-third':
-                targetVotingPower = Math.floor(totalVotingPower / 3) - 1;
+                targetVotingPower = Math.floor((totalVotingPower - 1) / 3);
                 scenarioDescription = `less than 1/3 (${targetVotingPower}/${totalVotingPower})`;
                 break;
             case 'exactly-one-third':

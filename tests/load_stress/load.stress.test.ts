@@ -132,7 +132,7 @@ describe('Stress and Load Tests', () => {
         });
     });
 
-    describe.only('Stress-02: Batch Transaction Test', () => {
+    describe('Stress-02: Batch Transaction Test', () => {
         it('should test batch transactions with different batch sizes', async function () {
             const testConfig = getTestConfigFor('stress02');
             this.timeout(testConfig.timeout);
