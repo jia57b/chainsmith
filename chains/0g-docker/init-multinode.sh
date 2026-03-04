@@ -63,6 +63,25 @@ for i in $(seq 1 $NUM_VALIDATORS); do
 done
 echo ""
 
+# Configure nodes to persist FinalizeBlock responses (support block_results RPC)
+echo "📝 Configuring nodes to persist FinalizeBlock responses..."
+for i in $(seq 1 $NUM_VALIDATORS); do
+  docker run --rm --platform $PLATFORM --entrypoint sh \
+    -v validator${i}_node_config:/home/zerog/.0gchain/config \
+    "$IMAGE" -c "
+      CONFIG=/home/zerog/.0gchain/config/config.toml
+      if grep -q 'discard_abci_responses' \$CONFIG 2>/dev/null; then
+        sed -i 's/discard_abci_responses = true/discard_abci_responses = false/' \$CONFIG
+      elif grep -q '\\[storage\\]' \$CONFIG 2>/dev/null; then
+        sed -i '/\\[storage\\]/a discard_abci_responses = false' \$CONFIG
+      else
+        printf '\n[storage]\ndiscard_abci_responses = false\n' >> \$CONFIG
+      fi
+    "
+  echo "   ✅ Validator $i: block_results persistence enabled"
+done
+echo ""
+
 # ----------------------------------------------------------
 # Step 3: Create signed deposit for each node
 # ----------------------------------------------------------
