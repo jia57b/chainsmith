@@ -23,6 +23,27 @@ generate_compose_file() {
   local NODE_P2P_PORT=$5
   local NODE_REST_PORT=$6
 
+  # Bootnode: don't expose EVM RPC and RPC ports - per Consensus-Basic-02
+  local GETH_PORTS_BLOCK NODE_PORTS_BLOCK
+  if [[ "$NODE_NAME" == "bootnode1" ]]; then
+    GETH_PORTS_BLOCK="    # EVM RPC (8545) not exposed - bootnode should only serve P2P
+"
+    NODE_PORTS_BLOCK="    # RPC (26657) not exposed - bootnode should only serve P2P
+    ports:
+      - \"${NODE_REST_PORT}:1317\"
+      - \"${NODE_P2P_PORT}:26656\"
+"
+  else
+    GETH_PORTS_BLOCK="    ports:
+      - \"${GETH_PORT}:8545\"
+"
+    NODE_PORTS_BLOCK="    ports:
+      - \"${NODE_RPC_PORT}:26657\"
+      - \"${NODE_REST_PORT}:1317\"
+      - \"${NODE_P2P_PORT}:26656\"
+"
+  fi
+
   cat <<EOF > "./docker-compose-${NODE_NAME}.yml"
 x-logging: &logging
   logging:
@@ -84,9 +105,7 @@ services:
       - --port=30303
       - --discovery.port=30303
       - --nat=extip:${GETH_IP}
-    ports:
-      - "${GETH_PORT}:8545"
-    volumes:
+${GETH_PORTS_BLOCK}    volumes:
       - ./config/story/${NODE_NAME}/geth:/root/.story/geth/config
       - db-${NODE_NAME}-geth-data:/root/.story/geth/data
       - db-${NODE_NAME}-node-data:/root/.story/story/data
@@ -131,11 +150,7 @@ services:
       - ./config/story/${NODE_NAME}/story/story.toml:/root/.story/story/config/story.toml
       - db-${NODE_NAME}-geth-data:/root/.story/geth/data
       - db-${NODE_NAME}-node-data:/root/.story/story/data
-    ports:
-      - "${NODE_RPC_PORT}:26657"
-      - "${NODE_REST_PORT}:1317"
-      - "${NODE_P2P_PORT}:26656"
-    networks:
+${NODE_PORTS_BLOCK}    networks:
       story-localnet:
         ipv4_address: ${NODE_IP}
     depends_on:

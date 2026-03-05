@@ -203,6 +203,9 @@ jobs:
             CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
 
         steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
             - name: Download test report artifact
               uses: actions/download-artifact@v4
               with:
@@ -247,6 +250,11 @@ jobs:
                     fi
                   fi
 
+                  # Generate test report index page
+                  echo "📑 Generating test report index..."
+                  chmod +x "$GITHUB_WORKSPACE/scripts/generate-report-index.sh"
+                  bash "$GITHUB_WORKSPACE/scripts/generate-report-index.sh"
+
                   # Commit and push
                   git add -A
                   git commit -m "Deploy test report: ${CHAIN_ENV}/#${{ github.run_id }}" || echo "No changes to commit"
@@ -259,6 +267,7 @@ jobs:
 
                   echo "✅ Deployed to ${REPORT_URL}"
 
+                  INDEX_URL="${PAGES_BASE}/"
                   echo "## 📊 Test Report Deployed" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
                   echo "| | |" >> $GITHUB_STEP_SUMMARY
@@ -266,3 +275,4 @@ jobs:
                   echo "| **Chain** | \`${CHAIN_ENV}\` |" >> $GITHUB_STEP_SUMMARY
                   echo "| **Run ID** | \`${{ github.run_id }}\` |" >> $GITHUB_STEP_SUMMARY
                   echo "| **Report** | [${REPORT_DIR}](${REPORT_URL}) |" >> $GITHUB_STEP_SUMMARY
+                  echo "| **Index** | [View All Reports](${INDEX_URL}) |" >> $GITHUB_STEP_SUMMARY
