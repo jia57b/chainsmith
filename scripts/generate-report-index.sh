@@ -23,6 +23,7 @@ cat > "$INDEX_HTML" << 'INDEX_HEAD'
     a { color: #0969da; text-decoration: none; }
     a:hover { text-decoration: underline; }
     .chain-name { font-weight: 600; }
+    .report-date { color: #656d76; font-size: 0.9em; margin-left: 0.5rem; }
   </style>
 </head>
 <body>
@@ -52,9 +53,18 @@ for chain_dir in */; do
     [ -d "$report_path" ] || continue
     run_id=$(basename "$report_path")
     [[ "$run_id" =~ ^[0-9]+$ ]] || continue
-    echo "$run_id"
-  done 2>/dev/null | sort -nr 2>/dev/null | head -10 | while read -r run_id; do
-    echo "    <li><a href=\"${chain}/${run_id}/\">Run #${run_id}</a></li>" >> "$INDEX_HTML"
+    # Get mtime from index.html (report) or directory; format as YYYY-MM-DD HH:MM
+    mtime_path="${chain}/${run_id}/index.html"
+    [ -f "$mtime_path" ] || mtime_path="${chain}/${run_id}"
+    ts=$(stat -c '%Y' "$mtime_path" 2>/dev/null || stat -f '%m' "$mtime_path" 2>/dev/null || echo "0")
+    if [ "$ts" = "0" ]; then
+      date_str="Unknown"
+    else
+      date_str=$(date -d "@${ts}" '+%Y-%m-%d %H:%M' 2>/dev/null || date -r "${ts}" '+%Y-%m-%d %H:%M' 2>/dev/null || echo "Unknown")
+    fi
+    echo "${run_id} ${date_str}"
+  done 2>/dev/null | sort -t' ' -k1 -nr | head -10 | while read -r run_id date_str; do
+    echo "    <li><a href=\"${chain}/${run_id}/\">Run #${run_id}</a><span class=\"report-date\">${date_str}</span></li>" >> "$INDEX_HTML"
   done
   echo "  </ul>" >> "$INDEX_HTML"
 done
