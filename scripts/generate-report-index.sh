@@ -30,14 +30,29 @@ cat > "$INDEX_HTML" << 'INDEX_HEAD'
   <p>Browse test reports by chain. Each chain shows the 10 most recent test runs.</p>
 INDEX_HEAD
 
+# Auto-discover chain report directories: only include dirs that have numeric subdirs (run_ids).
+# This avoids maintaining a chain list - new chains added to the workflow are picked up automatically.
 for chain_dir in */; do
   chain="${chain_dir%/}"
   [ -d "$chain" ] || continue
+  # Skip if no numeric subdirs (run_ids from GitHub Actions)
+  has_runs=false
+  for report_path in "${chain}"/*/; do
+    [ -d "$report_path" ] || continue
+    run_id=$(basename "$report_path")
+    if [[ "$run_id" =~ ^[0-9]+$ ]]; then
+      has_runs=true
+      break
+    fi
+  done
+  $has_runs || continue
   echo "  <h2 class=\"chain-name\">${chain}</h2>" >> "$INDEX_HTML"
   echo "  <ul>" >> "$INDEX_HTML"
   for report_path in "${chain}"/*/; do
     [ -d "$report_path" ] || continue
-    basename "$report_path"
+    run_id=$(basename "$report_path")
+    [[ "$run_id" =~ ^[0-9]+$ ]] || continue
+    echo "$run_id"
   done 2>/dev/null | sort -nr 2>/dev/null | head -10 | while read -r run_id; do
     echo "    <li><a href=\"${chain}/${run_id}/\">Run #${run_id}</a></li>" >> "$INDEX_HTML"
   done
