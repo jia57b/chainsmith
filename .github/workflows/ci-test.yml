@@ -286,7 +286,6 @@ jobs:
     deploy-report:
         name: Deploy Report to GitHub Pages
         needs: test
-        if: always()
         runs-on: ubuntu-latest
         permissions:
             contents: write
