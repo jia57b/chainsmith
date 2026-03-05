@@ -70,6 +70,11 @@ jobs:
                   if [ "${CHAIN_ENV}" = "0g-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet
+                    chmod +x generate_docker_compose.sh
+                    ./generate_docker_compose.sh
+                  fi
 
             - name: Start localnet
               working-directory: chains/${{ env.CHAIN_ENV }}
