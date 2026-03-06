@@ -54,11 +54,19 @@ VALIDATOR_COUNT=$(curl -s http://localhost:26657/validators 2>/dev/null | \
   grep -o '"total":"[0-9]*"' | \
   grep -o '[0-9]*' | head -1 || echo "unknown")
 
-# Check EVM JSON-RPC
+# Check EVM JSON-RPC (trim to avoid newline causing "integer expression expected" in GitHub Actions)
 EVM_OK=$(curl -s -X POST http://localhost:8545 \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}' 2>/dev/null | \
-  grep -c "result" || echo "0")
+  grep -c "result" 2>/dev/null || true)
+EVM_OK=${EVM_OK:-0}
+EVM_OK=$((EVM_OK + 0))  # Ensure numeric, strips whitespace/newlines
+
+if [ "$EVM_OK" -gt 0 ] 2>/dev/null; then
+    EVM_STATUS="✅ Ready"
+else
+    EVM_STATUS="⚠️  Not ready yet"
+fi
 
 echo ""
 echo "✅ Kava multi-validator localnet started!"
@@ -66,7 +74,7 @@ echo ""
 echo "📊 Network Status:"
 echo "   Block Height:    ${HEIGHT}"
 echo "   Validators:      ${VALIDATOR_COUNT}"
-echo "   EVM JSON-RPC:    $([ "$EVM_OK" -gt 0 ] && echo '✅ Ready' || echo '⚠️  Not ready yet')"
+echo "   EVM JSON-RPC:    ${EVM_STATUS}"
 echo ""
 echo "📍 Validator 1 Endpoints (primary):"
 echo "   CometBFT RPC:   http://localhost:26657"
