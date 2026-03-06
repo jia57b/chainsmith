@@ -15,6 +15,7 @@ on:
                 options:
                     - 0g-docker
                     - story-docker
+                    - kava-docker
 
 # Top-level permissions: minimal read-only
 permissions:
@@ -50,6 +51,12 @@ jobs:
               with:
                   version: latest
 
+            - name: Setup Go (for kvtool)
+              if: env.CHAIN_ENV == 'kava-docker'
+              uses: actions/setup-go@v5
+              with:
+                  go-version: '1.20'
+
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
 
@@ -74,6 +81,9 @@ jobs:
                     cd story-localnet
                     chmod +x generate_docker_compose.sh
                     ./generate_docker_compose.sh
+                  elif [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
                   fi
 
             - name: Start localnet
@@ -88,6 +98,9 @@ jobs:
                     cd story-localnet
                     chmod +x start.sh
                     ./start.sh
+                  elif [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    chmod +x start-multinode.sh
+                    ./start-multinode.sh
                   fi
 
             - name: Wait for chain readiness
@@ -175,22 +188,38 @@ jobs:
 
             # ─── Cleanup & Debug ────────────────────────────────────
             - name: Collect docker logs on failure
-              if: failure()
               working-directory: chains/${{ env.CHAIN_ENV }}
+              if: failure()
               run: |
                   echo "=== Docker container status ==="
-                  docker compose -f docker-compose.multinode.yml ps
+                  docker ps -a
                   echo ""
-                  echo "=== Validator 1 Node logs (last 100 lines) ==="
-                  docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 || true
-                  echo ""
-                  echo "=== Validator 1 Geth logs (last 100 lines) ==="
-                  docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 || true
+                  if [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    echo "=== Kava validator1 logs (last 100 lines) ==="
+                    docker compose -f docker-compose.multinode.yml logs kava-validator1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "0g-docker" ]; then
+                    echo "=== Validator 1 Node logs (last 100 lines) ==="
+                    docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 2>/dev/null || true
+                    echo ""
+                    echo "=== Validator 1 Geth logs (last 100 lines) ==="
+                    docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet
+                    echo "=== Story validator1 logs (last 100 lines) ==="
+                    docker compose -f docker-compose-validator1.yml logs validator1-node --tail=100 2>/dev/null || true
+                  fi
 
             - name: Stop localnet
-              if: always()
               working-directory: chains/${{ env.CHAIN_ENV }}
-              run: docker compose -f docker-compose.multinode.yml down -v || true
+              if: always()
+              run: |
+                  if [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    ./stop-multinode.sh --clean 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "0g-docker" ]; then
+                    docker compose -f docker-compose.multinode.yml down -v 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet && docker compose -f docker-compose-bootnode1.yml -f docker-compose-validator1.yml -f docker-compose-validator2.yml -f docker-compose-validator3.yml -f docker-compose-validator4.yml -f docker-compose-rpc1.yml down -v 2>/dev/null || true
+                  fi
 
     # ─── Deploy Report to GitHub Pages ──────────────────────────
     deploy-report:
@@ -235,6 +264,7 @@ jobs:
                   # Copy report to target directory
                   mkdir -p "gh-pages/${REPORT_DIR}"
                   cp -r ./report/* "gh-pages/${REPORT_DIR}/"
+                  echo "$(date -u '+%Y-%m-%d %H:%M')" > "gh-pages/${REPORT_DIR}/timestamp.txt"
                   echo "✅ Report copied to ${REPORT_DIR}/"
 
                   # Prune old reports (keep last MAX_REPORTS per chain)

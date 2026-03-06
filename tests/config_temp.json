@@ -165,5 +165,76 @@
             "privateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
             "privateKeySource": "local"
         }
+    },
+    "kava-docker": {
+        "description": "Kava Local Devnet (kvtool single node)",
+        "consensusLayer": "cosmos",
+        "executeLayer": "evm",
+        "chainId": 2222,
+        "executeLayerHttpRpcUrl": "http://localhost:8545",
+        "consensusLayerRpcUrl": "http://localhost:26657",
+        "consensusLayerHttpRestApiUrl": "http://localhost:1317",
+        "consensusRestApiPathPrefix": "",
+        "consensusRestApiVersion": "",
+        "executionMethod": "docker",
+        "docker": {
+            "containerPatterns": {
+                "executionLayer": "kava-docker_kava-validator{index}_1",
+                "consensusLayer": "kava-docker_kava-validator{index}_1"
+            },
+            "timeout": 30000
+        },
+        "nodes": [
+            {
+                "index": 1,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 8545,
+                "consensusLayerRpcPort": 26657,
+                "consensusLayerHttpRestApiPort": 1317,
+                "consensusLayerP2pCommPort": 26656
+            },
+            {
+                "index": 2,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 28545,
+                "consensusLayerRpcPort": 36657,
+                "consensusLayerHttpRestApiPort": 21317,
+                "consensusLayerP2pCommPort": 36656
+            },
+            {
+                "index": 3,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 38545,
+                "consensusLayerRpcPort": 46657,
+                "consensusLayerHttpRestApiPort": 31317,
+                "consensusLayerP2pCommPort": 46656
+            },
+            {
+                "index": 4,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 48545,
+                "consensusLayerRpcPort": 56657,
+                "consensusLayerHttpRestApiPort": 41317,
+                "consensusLayerP2pCommPort": 56656
+            }
+        ],
+        "founderWallet": {
+            "name": "whale2",
+            "address": "0x03db6b11F47d074a532b9eb8a98aB7AdA5845087",
+            "privateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
+            "privateKeySource": "local"
+        }
     }
 }
