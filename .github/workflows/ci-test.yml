@@ -51,11 +51,11 @@ jobs:
               with:
                   version: latest
 
-            - name: Setup Go (for kvtool)
-              if: env.CHAIN_ENV == 'kava-docker'
-              uses: actions/setup-go@v5
-              with:
-                  go-version: '1.20'
+            # - name: Setup Go (for kvtool)
+            #   if: env.CHAIN_ENV == 'kava-docker'
+            #   uses: actions/setup-go@v5
+            #   with:
+            #       go-version: '1.20'
 
             - name: Install dependencies
               run: pnpm install --frozen-lockfile
@@ -109,22 +109,45 @@ jobs:
                   echo "Waiting for ${CHAIN_ENV} chain to produce blocks..."
                   MAX_ATTEMPTS=60
                   ATTEMPT=0
+                  HEIGHT=0
                   while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
                     ATTEMPT=$((ATTEMPT + 1))
                     HEIGHT=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                     echo "  Attempt $ATTEMPT/$MAX_ATTEMPTS: block height = $HEIGHT"
                     if [ "$HEIGHT" -gt 2 ] 2>/dev/null; then
-                      echo "✅ Chain is producing blocks (height: $HEIGHT)"
-                      # Verify validators
-                      VALIDATORS=$(curl -s http://localhost:26657/validators | jq '.result.validators | length' 2>/dev/null || echo "0")
-                      echo "✅ Active validators: $VALIDATORS"
-                      exit 0
+                      echo "✅ Initial height reached ($HEIGHT), verifying sustained block production..."
+                      break
                     fi
                     sleep 5
                   done
-                  echo "❌ Chain failed to produce blocks within timeout"
-                  docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50
-                  exit 1
+                  if [ "$HEIGHT" -le 2 ] 2>/dev/null; then
+                    echo "❌ Chain failed to produce blocks within timeout"
+                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    exit 1
+                  fi
+                  # Verify height increases over two 10-second intervals
+                  HEIGHT1=$HEIGHT
+                  echo "  Check 1: height = $HEIGHT1, waiting 10s..."
+                  sleep 10
+                  HEIGHT2=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  echo "  Check 2: height = $HEIGHT2 (must be > $HEIGHT1)"
+                  if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
+                    echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
+                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    exit 1
+                  fi
+                  echo "  Check 2 passed, waiting 10s..."
+                  sleep 10
+                  HEIGHT3=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  echo "  Check 3: height = $HEIGHT3 (must be > $HEIGHT2)"
+                  if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
+                    echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
+                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    exit 1
+                  fi
+                  echo "✅ Chain is producing blocks (heights: $HEIGHT1 -> $HEIGHT2 -> $HEIGHT3)"
+                  VALIDATORS=$(curl -s http://localhost:26657/validators | jq '.result.validators | length' 2>/dev/null || echo "0")
+                  echo "✅ Active validators: $VALIDATORS"
 
             # ─── Test Configuration ─────────────────────────────────
             - name: Generate test configuration

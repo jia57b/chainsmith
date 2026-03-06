@@ -179,8 +179,8 @@
         "executionMethod": "docker",
         "docker": {
             "containerPatterns": {
-                "executionLayer": "kava-docker_kava-validator{index}_1",
-                "consensusLayer": "kava-docker_kava-validator{index}_1"
+                "executionLayer": "kava-docker-kava-validator{index}_1",
+                "consensusLayer": "kava-docker-kava-validator{index}_1"
             },
             "timeout": 30000
         },
