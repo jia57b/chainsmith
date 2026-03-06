@@ -1,342 +1,331 @@
 name: ChainSmith CI Tests
 
 on:
-  # push:
-  #   branches: [main, develop]
-  # pull_request:
-  #   branches: [main]
-  workflow_dispatch:
-    inputs:
-      chain:
-        description: 'Run test on chain'
-        required: false
-        default: '0g-docker'
-        type: choice
-        options:
-          - 0g-docker
+    # push:
+    #   branches: [main, develop]
+    # pull_request:
+    #   branches: [main]
+    workflow_dispatch:
+        inputs:
+            chain:
+                description: 'Run test on chain'
+                required: false
+                default: '0g-docker'
+                type: choice
+                options:
+                    - 0g-docker
+                    - story-docker
+                    - kava-docker
 
 # Top-level permissions: minimal read-only
 permissions:
-  contents: read
+    contents: read
 
 # Allow only one concurrent deployment to gh-pages
 concurrency:
-  group: deploy-pages
-  cancel-in-progress: false
+    group: deploy-pages
+    cancel-in-progress: false
 
 jobs:
-  test:
-    name: Run Tests (${{ inputs.chain || '0g-docker' }})
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    env:
-      CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
+    test:
+        name: Run Tests (${{ inputs.chain || '0g-docker' }})
+        runs-on: ubuntu-latest
+        timeout-minutes: 30
+        env:
+            CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
 
-    steps:
-      # ─── Setup ───────────────────────────────────────────────
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
+        steps:
+            # ─── Setup ───────────────────────────────────────────────
+            - name: Checkout repository
+              uses: actions/checkout@v4
+              with:
+                  submodules: recursive
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: latest
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: latest
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+            # - name: Setup Go (for kvtool)
+            #   if: env.CHAIN_ENV == 'kava-docker'
+            #   uses: actions/setup-go@v5
+            #   with:
+            #       go-version: '1.20'
 
-      # ─── 0G Localnet ────────────────────────────────────────
-      - name: Pull Docker images
-        working-directory: chains/${{ env.CHAIN_ENV }}
-        run: |
-          DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/node:v2.0.4
-          DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/geth:v2.0.4
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
 
-      - name: Initialize multinode localnet
-        working-directory: chains/${{ env.CHAIN_ENV }}
-        run: |
-          chmod +x init-multinode.sh
-          ./init-multinode.sh
+            - name: Pull Docker images or clone repositories
+              working-directory: chains/${{ env.CHAIN_ENV }}
+              run: |
+                  if [ "${CHAIN_ENV}" = "0g-docker" ]; then
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/node:v2.0.4
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull ghcr.io/emberstake/0g-docker/geth:v2.0.4
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    git clone https://github.com/piplabs/story.git
+                    git clone https://github.com/piplabs/story-geth.git
+                  fi
 
-      - name: Start localnet
-        working-directory: chains/${{ env.CHAIN_ENV }}
-        run: |
-          docker compose -f docker-compose.multinode.yml up -d
-          echo "Waiting 10s for containers to start..."
-          sleep 10
-          docker compose -f docker-compose.multinode.yml ps
+            - name: Initialize multinode localnet
+              working-directory: chains/${{ env.CHAIN_ENV }}
+              run: |
+                  if [ "${CHAIN_ENV}" = "0g-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet
+                    chmod +x generate_docker_compose.sh
+                    ./generate_docker_compose.sh
+                  elif [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  fi
 
-      - name: Wait for chain readiness
-        timeout-minutes: 5
-        run: |
-          echo "Waiting for 0G chain to produce blocks..."
-          MAX_ATTEMPTS=60
-          ATTEMPT=0
-          while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
-            ATTEMPT=$((ATTEMPT + 1))
-            HEIGHT=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
-            echo "  Attempt $ATTEMPT/$MAX_ATTEMPTS: block height = $HEIGHT"
-            if [ "$HEIGHT" -gt 2 ] 2>/dev/null; then
-              echo "✅ Chain is producing blocks (height: $HEIGHT)"
-              # Verify validators
-              VALIDATORS=$(curl -s http://localhost:26657/validators | jq '.result.validators | length' 2>/dev/null || echo "0")
-              echo "✅ Active validators: $VALIDATORS"
-              exit 0
-            fi
-            sleep 5
-          done
-          echo "❌ Chain failed to produce blocks within timeout"
-          docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50
-          exit 1
+            - name: Start localnet
+              working-directory: chains/${{ env.CHAIN_ENV }}
+              run: |
+                  if [ "${CHAIN_ENV}" = "0g-docker" ]; then
+                    docker compose -f docker-compose.multinode.yml up -d
+                    echo "Waiting 10s for containers to start..."
+                    sleep 10
+                    docker compose -f docker-compose.multinode.yml ps
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet
+                    chmod +x start.sh
+                    ./start.sh
+                  elif [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    chmod +x start-multinode.sh
+                    ./start-multinode.sh
+                  fi
 
-      # ─── Test Configuration ─────────────────────────────────
-      - name: Generate test configuration
-        run: |
-          cat > tests/config.json << EOF
-          {
-            "testConfig": {
-              "performanceExpect": {
-                "tokenTransfer": {
-                  "threshold": 10000,
-                  "percentage": 90
-                }
-              },
-              "faultTolerance": {
-                "waitTimeForBlock": 10000,
-                "waitTimeForService": 45000,
-                "waitTimeLong": 300000,
-                "timeout": 300000
-              }
-            },
-            "${CHAIN_ENV}": {
-              "description": "CI Localnet (4 validators)",
-              "consensusLayer": "cosmos",
-              "executeLayer": "evm",
-              "chainId": 16601,
-              "executeLayerHttpRpcUrl": "http://localhost:8545",
-              "consensusLayerRpcUrl": "http://localhost:26657",
-              "consensusLayerHttpRestApiUrl": "http://localhost:1317",
-              "consensusRestApiPathPrefix": "",
-              "consensusRestApiVersion": "",
-              "executionMethod": "docker",
-              "docker": {
-                "containerPatterns": {
-                  "executionLayer": "${CHAIN_ENV}-validator{index}-geth-1",
-                  "consensusLayer": "${CHAIN_ENV}-validator{index}-node-1"
-                },
-                "timeout": 30000
-              },
-              "nodes": [
-                {
-                  "index": 1,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 8545,
-                  "consensusLayerRpcPort": 26657,
-                  "consensusLayerHttpRestApiPort": 1317,
-                  "consensusLayerP2pCommPort": 26656
-                },
-                {
-                  "index": 2,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 28545,
-                  "consensusLayerRpcPort": 36657,
-                  "consensusLayerHttpRestApiPort": 21317,
-                  "consensusLayerP2pCommPort": 36656
-                },
-                {
-                  "index": 3,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 38545,
-                  "consensusLayerRpcPort": 46657,
-                  "consensusLayerHttpRestApiPort": 31317,
-                  "consensusLayerP2pCommPort": 46656
-                },
-                {
-                  "index": 4,
-                  "url": "http://localhost",
-                  "type": "validator",
-                  "votingPower": 1,
-                  "active": true,
-                  "executeLayerHttpRpcPort": 48545,
-                  "consensusLayerRpcPort": 56657,
-                  "consensusLayerHttpRestApiPort": 41317,
-                  "consensusLayerP2pCommPort": 56656
-                }
-              ],
-              "founderWallet": {
-                "name": "hardhat-account-0",
-                "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
-                "privateKey": "0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80",
-                "privateKeySource": "local"
-              }
-            }
-          }
-          EOF
-          echo "✅ tests/config.json generated"
-          cat tests/config.json | jq '.["'"$CHAIN_ENV"'"].nodes | length' | xargs -I{} echo "   Configured {} validator nodes"
+            - name: Wait for chain readiness
+              timeout-minutes: 5
+              run: |
+                  echo "Waiting for ${CHAIN_ENV} chain to produce blocks..."
+                  MAX_ATTEMPTS=60
+                  ATTEMPT=0
+                  HEIGHT=0
+                  while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
+                    ATTEMPT=$((ATTEMPT + 1))
+                    HEIGHT=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                    echo "  Attempt $ATTEMPT/$MAX_ATTEMPTS: block height = $HEIGHT"
+                    if [ "$HEIGHT" -gt 2 ] 2>/dev/null; then
+                      echo "✅ Initial height reached ($HEIGHT), verifying sustained block production..."
+                      break
+                    fi
+                    sleep 5
+                  done
+                  if [ "$HEIGHT" -le 2 ] 2>/dev/null; then
+                    echo "❌ Chain failed to produce blocks within timeout"
+                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    exit 1
+                  fi
+                  # Verify height increases over two 10-second intervals
+                  HEIGHT1=$HEIGHT
+                  echo "  Check 1: height = $HEIGHT1, waiting 10s..."
+                  sleep 10
+                  HEIGHT2=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  echo "  Check 2: height = $HEIGHT2 (must be > $HEIGHT1)"
+                  if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
+                    echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
+                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    exit 1
+                  fi
+                  echo "  Check 2 passed, waiting 10s..."
+                  sleep 10
+                  HEIGHT3=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  echo "  Check 3: height = $HEIGHT3 (must be > $HEIGHT2)"
+                  if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
+                    echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
+                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    exit 1
+                  fi
+                  echo "✅ Chain is producing blocks (heights: $HEIGHT1 -> $HEIGHT2 -> $HEIGHT3)"
+                  VALIDATORS=$(curl -s http://localhost:26657/validators | jq '.result.validators | length' 2>/dev/null || echo "0")
+                  echo "✅ Active validators: $VALIDATORS"
 
-      - name: Copy and generate load test configuration
-        run: |
-          cp tests/load-stress.config.example.json tests/load-stress.config.json
+            # ─── Test Configuration ─────────────────────────────────
+            - name: Generate test configuration
+              run: |
+                  cp tests/config_temp.json tests/config.json
 
-      - name: Generate .env file
-        run: |
-          cat > .env << EOF
-          CHAIN_ENV=${CHAIN_ENV}
-          EOF
-          echo "✅ .env generated (CHAIN_ENV=${CHAIN_ENV})"
+            - name: Copy and generate load test configuration
+              run: |
+                  cp tests/load-stress.config.example.json tests/load-stress.config.json
 
-      # ─── Run Tests ──────────────────────────────────────────
-      - name: Test - Basic
-        continue-on-error: true
-        run: pnpm test:basic
+            - name: Generate .env file
+              run: |
+                  cat > .env << EOF
+                  CHAIN_ENV=${CHAIN_ENV}
+                  EOF
+                  echo "✅ .env generated (CHAIN_ENV=${CHAIN_ENV})"
 
-      - name: Test - EVM RPC
-        continue-on-error: true
-        run: pnpm test:rpc:evm
+            # ─── Run Tests ──────────────────────────────────────────
+            - name: Test - Basic
+              continue-on-error: true
+              run: pnpm test:basic
 
-      - name: Test - CometBFT RPC
-        continue-on-error: true
-        run: pnpm test:rpc:cometbft
+            - name: Test - EVM RPC
+              continue-on-error: true
+              run: pnpm test:rpc:evm
 
-      # - name: Test - Cosmos API
-      #   continue-on-error: true
-      #   run: pnpm test:cosmos:api:sample
+            - name: Test - CometBFT RPC
+              continue-on-error: true
+              run: pnpm test:rpc:cometbft
 
-      - name: Test - Performance
-        continue-on-error: true
-        run: pnpm test:performance
-      
-      - name: Test - Load Stress
-        continue-on-error: true
-        run: pnpm test:load:stress
+            # - name: Test - Cosmos API
+            #   continue-on-error: true
+            #   run: pnpm test:cosmos:api:sample
 
-      - name: Test - Fault Tolerance
-        continue-on-error: true
-        run: pnpm test:fault-tolerance
+            - name: Test - Performance
+              continue-on-error: true
+              run: pnpm test:performance
 
-      # ─── Reports ────────────────────────────────────────────
-      - name: Merge test reports
-        if: always()
-        run: |
-          chmod +x scripts/merge-reports.sh
-          bash scripts/merge-reports.sh
+            - name: Test - Load Stress
+              continue-on-error: true
+              run: pnpm test:load:stress
 
-      - name: Upload test report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report
-          path: tests/test-report/merged/
-          retention-days: 30
+            - name: Test - Fault Tolerance
+              continue-on-error: true
+              run: pnpm test:fault-tolerance
 
-      # ─── Cleanup & Debug ────────────────────────────────────
-      - name: Collect docker logs on failure
-        if: failure()
-        working-directory: chains/${{ env.CHAIN_ENV }}
-        run: |
-          echo "=== Docker container status ==="
-          docker compose -f docker-compose.multinode.yml ps
-          echo ""
-          echo "=== Validator 1 Node logs (last 100 lines) ==="
-          docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 || true
-          echo ""
-          echo "=== Validator 1 Geth logs (last 100 lines) ==="
-          docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 || true
+            # ─── Reports ────────────────────────────────────────────
+            - name: Merge test reports
+              if: always()
+              run: |
+                  chmod +x scripts/merge-reports.sh
+                  bash scripts/merge-reports.sh
 
-      - name: Stop localnet
-        if: always()
-        working-directory: chains/${{ env.CHAIN_ENV }}
-        run: docker compose -f docker-compose.multinode.yml down -v || true
+            - name: Upload test report artifact
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: test-report
+                  path: tests/test-report/merged/
+                  retention-days: 30
 
-  # ─── Deploy Report to GitHub Pages ──────────────────────────
-  deploy-report:
-    name: Deploy Report to GitHub Pages
-    needs: test
-    if: always()
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    env:
-      CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
+            # ─── Cleanup & Debug ────────────────────────────────────
+            - name: Collect docker logs on failure
+              working-directory: chains/${{ env.CHAIN_ENV }}
+              if: failure()
+              run: |
+                  echo "=== Docker container status ==="
+                  docker ps -a
+                  echo ""
+                  if [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    echo "=== Kava validator1 logs (last 100 lines) ==="
+                    docker compose -f docker-compose.multinode.yml logs kava-validator1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "0g-docker" ]; then
+                    echo "=== Validator 1 Node logs (last 100 lines) ==="
+                    docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 2>/dev/null || true
+                    echo ""
+                    echo "=== Validator 1 Geth logs (last 100 lines) ==="
+                    docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet
+                    echo "=== Story validator1 logs (last 100 lines) ==="
+                    docker compose -f docker-compose-validator1.yml logs validator1-node --tail=100 2>/dev/null || true
+                  fi
 
-    steps:
-      - name: Download test report artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: test-report
-          path: ./report
+            - name: Stop localnet
+              working-directory: chains/${{ env.CHAIN_ENV }}
+              if: always()
+              run: |
+                  if [ "${CHAIN_ENV}" = "kava-docker" ]; then
+                    ./stop-multinode.sh --clean 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "0g-docker" ]; then
+                    docker compose -f docker-compose.multinode.yml down -v 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet && docker compose -f docker-compose-bootnode1.yml -f docker-compose-validator1.yml -f docker-compose-validator2.yml -f docker-compose-validator3.yml -f docker-compose-validator4.yml -f docker-compose-rpc1.yml down -v 2>/dev/null || true
+                  fi
 
-      - name: Deploy to gh-pages branch
-        run: |
-          set -e
-          REPORT_DIR="${CHAIN_ENV}/${{ github.run_id }}"
-          MAX_REPORTS=20
+    # ─── Deploy Report to GitHub Pages ──────────────────────────
+    deploy-report:
+        name: Deploy Report to GitHub Pages
+        needs: test
+        runs-on: ubuntu-latest
+        permissions:
+            contents: write
+        env:
+            CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
 
-          # Configure git
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
 
-          # Clone gh-pages branch (or create if not exists)
-          git clone --branch gh-pages --single-branch \
-            "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
-            gh-pages 2>/dev/null || {
-            mkdir gh-pages && cd gh-pages && git init
-            git checkout -b gh-pages
-            git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
-            cd ..
-          }
+            - name: Download test report artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: test-report
+                  path: ./report
 
-          # Copy report to target directory
-          mkdir -p "gh-pages/${REPORT_DIR}"
-          cp -r ./report/* "gh-pages/${REPORT_DIR}/"
-          echo "✅ Report copied to ${REPORT_DIR}/"
+            - name: Deploy to gh-pages branch
+              run: |
+                  set -e
+                  REPORT_DIR="${CHAIN_ENV}/${{ github.run_id }}"
+                  MAX_REPORTS=20
 
-          # Prune old reports (keep last MAX_REPORTS per chain)
-          cd gh-pages
-          if [ -d "${CHAIN_ENV}" ]; then
-            REPORT_COUNT=$(ls -1d ${CHAIN_ENV}/*/ 2>/dev/null | wc -l)
-            if [ "$REPORT_COUNT" -gt "$MAX_REPORTS" ]; then
-              REMOVE_COUNT=$((REPORT_COUNT - MAX_REPORTS))
-              ls -1d ${CHAIN_ENV}/*/ | head -n $REMOVE_COUNT | while read dir; do
-                echo "🗑️  Removing old report: $dir"
-                rm -rf "$dir"
-              done
-            fi
-          fi
+                  # Configure git
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Commit and push
-          git add -A
-          git commit -m "Deploy test report: ${CHAIN_ENV}/#${{ github.run_id }}" || echo "No changes to commit"
-          git push origin gh-pages
+                  # Clone gh-pages branch (or create if not exists)
+                  git clone --branch gh-pages --single-branch \
+                    "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+                    gh-pages 2>/dev/null || {
+                    mkdir gh-pages && cd gh-pages && git init
+                    git checkout -b gh-pages
+                    git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+                    cd ..
+                  }
 
-          # Write report link to job summary
-          REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
-          PAGES_BASE="https://${{ github.repository_owner }}.github.io/${REPO_NAME}"
-          REPORT_URL="${PAGES_BASE}/${REPORT_DIR}/"
+                  # Copy report to target directory
+                  mkdir -p "gh-pages/${REPORT_DIR}"
+                  cp -r ./report/* "gh-pages/${REPORT_DIR}/"
+                  echo "$(date -u '+%Y-%m-%d %H:%M')" > "gh-pages/${REPORT_DIR}/timestamp.txt"
+                  echo "✅ Report copied to ${REPORT_DIR}/"
 
-          echo "✅ Deployed to ${REPORT_URL}"
+                  # Prune old reports (keep last MAX_REPORTS per chain)
+                  cd gh-pages
+                  if [ -d "${CHAIN_ENV}" ]; then
+                    REPORT_COUNT=$(ls -1d ${CHAIN_ENV}/*/ 2>/dev/null | wc -l)
+                    if [ "$REPORT_COUNT" -gt "$MAX_REPORTS" ]; then
+                      REMOVE_COUNT=$((REPORT_COUNT - MAX_REPORTS))
+                      ls -1d ${CHAIN_ENV}/*/ | head -n $REMOVE_COUNT | while read dir; do
+                        echo "🗑️  Removing old report: $dir"
+                        rm -rf "$dir"
+                      done
+                    fi
+                  fi
 
-          echo "## 📊 Test Report Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| | |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Chain** | \`${CHAIN_ENV}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Run ID** | \`${{ github.run_id }}\` |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Report** | [${REPORT_DIR}](${REPORT_URL}) |" >> $GITHUB_STEP_SUMMARY
+                  # Generate test report index page
+                  echo "📑 Generating test report index..."
+                  chmod +x "$GITHUB_WORKSPACE/scripts/generate-report-index.sh"
+                  bash "$GITHUB_WORKSPACE/scripts/generate-report-index.sh"
+
+                  # Commit and push
+                  git add -A
+                  git commit -m "Deploy test report: ${CHAIN_ENV}/#${{ github.run_id }}" || echo "No changes to commit"
+                  git push origin gh-pages
+
+                  # Write report link to job summary
+                  REPO_NAME=$(echo ${{ github.repository }} | cut -d'/' -f2)
+                  PAGES_BASE="https://${{ github.repository_owner }}.github.io/${REPO_NAME}"
+                  REPORT_URL="${PAGES_BASE}/${REPORT_DIR}/"
+
+                  echo "✅ Deployed to ${REPORT_URL}"
+
+                  INDEX_URL="${PAGES_BASE}/"
+                  echo "## 📊 Test Report Deployed" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "| | |" >> $GITHUB_STEP_SUMMARY
+                  echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+                  echo "| **Chain** | \`${CHAIN_ENV}\` |" >> $GITHUB_STEP_SUMMARY
+                  echo "| **Run ID** | \`${{ github.run_id }}\` |" >> $GITHUB_STEP_SUMMARY
+                  echo "| **Report** | [${REPORT_DIR}](${REPORT_URL}) |" >> $GITHUB_STEP_SUMMARY
+                  echo "| **Index** | [View All Reports](${INDEX_URL}) |" >> $GITHUB_STEP_SUMMARY
