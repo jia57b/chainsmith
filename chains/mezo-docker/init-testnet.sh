@@ -75,17 +75,30 @@ echo ""
 # ----------------------------------------------------------
 echo "⚙️  Step 3/${TOTAL_STEPS}: Creating client.toml for each node..."
 for i in $(seq 0 $((NUM_VALIDATORS - 1))); do
-    docker run --rm --user 0:0 \
-        -v "${BASE_DIR}/node${i}/mezod:/home/nonroot/.mezod" \
-        --entrypoint /usr/bin/mezod \
-        "${IMAGE}" \
-        config set client chain-id "${CHAINID}" --home /home/nonroot/.mezod 2>/dev/null
+    CLIENT_TOML="${BASE_DIR}/node${i}/mezod/config/client.toml"
 
     docker run --rm --user 0:0 \
         -v "${BASE_DIR}/node${i}/mezod:/home/nonroot/.mezod" \
         --entrypoint /usr/bin/mezod \
         "${IMAGE}" \
-        config set client keyring-backend test --home /home/nonroot/.mezod 2>/dev/null
+        config set client chain-id "${CHAINID}" --home /home/nonroot/.mezod 2>&1 || true
+
+    docker run --rm --user 0:0 \
+        -v "${BASE_DIR}/node${i}/mezod:/home/nonroot/.mezod" \
+        --entrypoint /usr/bin/mezod \
+        "${IMAGE}" \
+        config set client keyring-backend test --home /home/nonroot/.mezod 2>&1 || true
+
+    if [ ! -f "$CLIENT_TOML" ]; then
+        echo "   ⚠️  Node $i: mezod config set did not create client.toml, writing manually..."
+        cat > "$CLIENT_TOML" <<EOF
+chain-id = "${CHAINID}"
+keyring-backend = "test"
+output = "text"
+node = "tcp://localhost:26657"
+broadcast-mode = "sync"
+EOF
+    fi
 
     echo "   ✅ Node $i: client.toml created"
 done
@@ -205,6 +218,19 @@ EVRPC
         done
     '
 echo "   ✅ All nodes patched"
+echo ""
+
+# ----------------------------------------------------------
+# Step 6: Fix file permissions
+# ----------------------------------------------------------
+# Init steps run as root (--user 0:0) so all files are owned by UID 0.
+# The mezod image runs as "nonroot" (UID 65532) from distroless.
+# Without fixing permissions, nonroot cannot read config files.
+echo "🔐 Step 6/${TOTAL_STEPS}: Fixing file permissions for nonroot user (UID 65532)..."
+docker run --rm --user 0:0 \
+    -v "${BASE_DIR}:/data" \
+    alpine sh -c 'chown -R 65532:65532 /data && chmod -R u+rw /data'
+echo "   ✅ Permissions fixed"
 echo ""
 
 echo "============================================"
