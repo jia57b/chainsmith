@@ -18,6 +18,7 @@ import {
 import { WalletFactory } from '../blockchain/factory';
 import { ethers } from 'ethers';
 import { Config, sleepMs } from '../utils/common';
+import { validateSchema, formatValidationErrors } from '../utils/schema-validator';
 
 export class Blockchain implements IBlockchain {
     readonly name: string;
@@ -531,48 +532,6 @@ export class Blockchain implements IBlockchain {
     }
 
     /**
-     * Remove node (use with caution, for maintenance)
-     */
-    removeNode(index: number): boolean {
-        const nodeIndex = this.nodes.findIndex(node => node.index === index);
-        if (nodeIndex === -1) {
-            return false;
-        }
-        this.nodes.splice(nodeIndex, 1);
-        console.log(`Node-${index} has been removed from the blockchain`);
-        return true;
-    }
-
-    /**
-     * Health check all nodes
-     */
-    async healthCheck(): Promise<Map<number, any>> {
-        const healthStatus = new Map<number, any>();
-
-        for (const node of this.nodes) {
-            const status = {
-                index: node.index,
-                type: node.type,
-                active: node.active,
-                connected: false,
-                error: null as string | null,
-            };
-
-            if (node.active) {
-                try {
-                    status.connected = await node.testConnection();
-                } catch (error) {
-                    status.error = error instanceof Error ? error.message : String(error);
-                }
-            }
-
-            healthStatus.set(node.index, status);
-        }
-
-        return healthStatus;
-    }
-
-    /**
      * Create test account
      * @param privateKey Optional private key, randomly generated if not provided
      * @returns Account information containing address and private key
@@ -933,13 +892,6 @@ export class Blockchain implements IBlockchain {
     }
 
     /**
-     * @deprecated Use getConsensusLayerRpcUrl() instead
-     */
-    getPublicConsensusEndpoint(): string {
-        return this.getConsensusLayerRpcUrl();
-    }
-
-    /**
      * Send simple transaction via public endpoint
      * Uses top-level config URL and port, does not depend on nodes array
      * @param to - Destination address
@@ -999,62 +951,6 @@ export class Blockchain implements IBlockchain {
             gasUsed: '0',
             blockNumber: 0,
         };
-    }
-
-    /**
-     * Execute RPC call via public endpoint (execution layer)
-     * @param request - RPC request
-     * @param requestSchema - Optional request schema
-     * @param responseSchema - Optional response schema
-     * @returns RPC response
-     */
-    async makeRpcCallViaPublicEndpoint(request: Request, requestSchema?: any, responseSchema?: any): Promise<Response> {
-        const endpoint = this.getPublicEndpoint();
-
-        // Validate request schema (if provided)
-        if (requestSchema) {
-            // Schema validation logic can be added here
-        }
-
-        const response = await fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(request),
-        });
-
-        const result = await response.json();
-
-        // Validate response schema (if provided)
-        if (responseSchema) {
-            // Schema validation logic can be added here
-        }
-
-        return result as Response;
-    }
-
-    /**
-     * Execute RPC call via public endpoint (consensus layer)
-     * @param path - RPC path (e.g., '/status', '/validators')
-     * @param params - RPC parameters
-     * @returns RPC response
-     */
-    async makeConsensusRpcCallViaPublicEndpoint(path: string, params: any = {}): Promise<any> {
-        const endpoint = this.getPublicConsensusEndpoint();
-
-        // Build query string
-        const queryString = Object.entries(params)
-            .filter(([_, value]) => value !== undefined && value !== null)
-            .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(String(value))}`)
-            .join('&');
-
-        const url = queryString ? `${endpoint}${path}?${queryString}` : `${endpoint}${path}`;
-
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' },
-        });
-
-        return await response.json();
     }
 
     /**
@@ -1293,9 +1189,9 @@ export class Blockchain implements IBlockchain {
     async makeConsensusRpcCall(
         path: string,
         params: any = {},
-        _paramsSchema?: any,
-        _responseSchema?: any,
-        _responseCheckFrom: string = '',
+        paramsSchema?: any,
+        responseSchema?: any,
+        responseCheckFrom: string = '',
         nodeIndex?: number
     ): Promise<any> {
         const node = nodeIndex !== undefined ? this.getNode(nodeIndex) : this.getActiveNotBootNodes()[0];
@@ -1305,12 +1201,43 @@ export class Blockchain implements IBlockchain {
             throw new Error('Consensus layer client not initialized');
         }
 
-        // Check if client has makeRpcRequest method (for CosmosConsensusClient)
-        if (typeof (consensusClient as any).makeRpcRequest === 'function') {
-            return await (consensusClient as any).makeRpcRequest(path, params);
+        if (paramsSchema) {
+            const validation = validateSchema(params, paramsSchema);
+            if (!validation.valid) {
+                console.warn(
+                    `⚠️  Consensus RPC request schema validation warning [${path}]:\n${formatValidationErrors(validation.errors)}`
+                );
+            }
         }
 
-        throw new Error(`makeRpcRequest is not supported by the current consensus layer client`);
+        if (typeof (consensusClient as any).makeRpcRequest !== 'function') {
+            throw new Error(`makeRpcRequest is not supported by the current consensus layer client`);
+        }
+
+        const response = await (consensusClient as any).makeRpcRequest(path, params);
+
+        if (responseSchema) {
+            // When responseCheckFrom is specified (e.g. 'result.header'), validate
+            // only that sub-path; otherwise validate the full response envelope.
+            let target = response;
+            if (responseCheckFrom) {
+                for (const key of responseCheckFrom.split('.')) {
+                    target = target?.[key];
+                }
+            }
+
+            const validation = validateSchema(target, responseSchema);
+            if (!validation.valid) {
+                const preview = JSON.stringify(response)?.substring(0, 500);
+                const errorMsg =
+                    `Consensus RPC response schema validation failed [${path}]:\n` +
+                    `${formatValidationErrors(validation.errors)}\n` +
+                    `  Actual response: ${preview}`;
+                throw new Error(errorMsg);
+            }
+        }
+
+        return response;
     }
 
     /**

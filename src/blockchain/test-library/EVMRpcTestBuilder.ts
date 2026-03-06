@@ -738,7 +738,10 @@ export class EVMRpcTestBuilder {
         const responseSchema = {
             title: 'quantity',
             description: 'number of connected peers.',
-            type: 'string',
+            oneOf: [
+                { type: 'string', pattern: '^0x[a-fA-F0-9]+$' },
+                { type: 'integer', minimum: 0 },
+            ],
         };
         const request = {
             jsonrpc: '2.0',
@@ -1220,7 +1223,10 @@ export class EVMRpcTestBuilder {
             minItems: 2,
             maxItems: 2,
         };
-        const responseSchema = EVMRpcTestBuilder.transactionResultSchema;
+        const responseSchema = {
+            title: 'transactionResultOrNull',
+            oneOf: [EVMRpcTestBuilder.transactionResultSchema, { type: 'null' }],
+        };
         const request = {
             method: 'eth_getTransactionByBlockNumberAndIndex',
             params: [this.testBlockNumber, this.testTxIndex],

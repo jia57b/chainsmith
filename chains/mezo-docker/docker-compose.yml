@@ -1,0 +1,153 @@
+services:
+    mezo-validator-0:
+        container_name: mezo-validator-0
+        image: mezo/mezod:latest
+        platform: linux/amd64
+        entrypoint: ['/usr/bin/mezod']
+        command: >
+            start
+            --metrics
+            --log_level info
+            --minimum-gas-prices=0.0001abtc
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --json-rpc.address 0.0.0.0:8545
+            --home /home/nonroot/.mezod
+            --chain-id mezo_31612-1
+        ports:
+            - '26656:26656' # P2P
+            - '26657:26657' # CometBFT RPC
+            - '1317:1317' # REST API
+            - '9090:9090' # gRPC
+            - '8545:8545' # EVM HTTP RPC
+            - '8546:8546' # EVM WebSocket
+        volumes:
+            - ./testnet-data/node0/mezod:/home/nonroot/.mezod
+        networks:
+            mezo-localnet:
+                ipv4_address: 192.168.20.2
+        restart: unless-stopped
+        healthcheck:
+            test: ['CMD', 'curl', '-f', 'http://localhost:26657/status']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+
+    mezo-validator-1:
+        container_name: mezo-validator-1
+        image: mezo/mezod:latest
+        platform: linux/amd64
+        entrypoint: ['/usr/bin/mezod']
+        command: >
+            start
+            --metrics
+            --log_level info
+            --minimum-gas-prices=0.0001abtc
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --json-rpc.address 0.0.0.0:8545
+            --home /home/nonroot/.mezod
+            --chain-id mezo_31612-1
+        ports:
+            - '36656:26656'
+            - '36657:26657'
+            - '21317:1317'
+            - '29090:9090'
+            - '28545:8545'
+            - '28546:8546'
+        volumes:
+            - ./testnet-data/node1/mezod:/home/nonroot/.mezod
+        networks:
+            mezo-localnet:
+                ipv4_address: 192.168.20.3
+        restart: unless-stopped
+        healthcheck:
+            test: ['CMD', 'curl', '-f', 'http://localhost:26657/status']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        depends_on:
+            mezo-validator-0:
+                condition: service_started
+
+    mezo-validator-2:
+        container_name: mezo-validator-2
+        image: mezo/mezod:latest
+        platform: linux/amd64
+        entrypoint: ['/usr/bin/mezod']
+        command: >
+            start
+            --metrics
+            --log_level info
+            --minimum-gas-prices=0.0001abtc
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --json-rpc.address 0.0.0.0:8545
+            --home /home/nonroot/.mezod
+            --chain-id mezo_31612-1
+        ports:
+            - '46656:26656'
+            - '46657:26657'
+            - '31317:1317'
+            - '39090:9090'
+            - '38545:8545'
+            - '38546:8546'
+        volumes:
+            - ./testnet-data/node2/mezod:/home/nonroot/.mezod
+        networks:
+            mezo-localnet:
+                ipv4_address: 192.168.20.4
+        restart: unless-stopped
+        healthcheck:
+            test: ['CMD', 'curl', '-f', 'http://localhost:26657/status']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        depends_on:
+            mezo-validator-0:
+                condition: service_started
+
+    mezo-validator-3:
+        container_name: mezo-validator-3
+        image: mezo/mezod:latest
+        platform: linux/amd64
+        entrypoint: ['/usr/bin/mezod']
+        command: >
+            start
+            --metrics
+            --log_level info
+            --minimum-gas-prices=0.0001abtc
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --json-rpc.address 0.0.0.0:8545
+            --home /home/nonroot/.mezod
+            --chain-id mezo_31612-1
+        ports:
+            - '56656:26656'
+            - '56657:26657'
+            - '41317:1317'
+            - '49090:9090'
+            - '48545:8545'
+            - '48546:8546'
+        volumes:
+            - ./testnet-data/node3/mezod:/home/nonroot/.mezod
+        networks:
+            mezo-localnet:
+                ipv4_address: 192.168.20.5
+        restart: unless-stopped
+        healthcheck:
+            test: ['CMD', 'curl', '-f', 'http://localhost:26657/status']
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        depends_on:
+            mezo-validator-0:
+                condition: service_started
+
+networks:
+    mezo-localnet:
+        driver: bridge
+        ipam:
+            driver: default
+            config:
+                - subnet: 192.168.20.0/24

@@ -9,16 +9,8 @@ import { NodeType } from '../../blockchain/types';
  * - BlockchainNode.getExecuteLayerRpcUrl() returns specific node endpoint
  * - ViaPublicEndpoint methods are for production-like scenarios
  *
- * CODE REVIEW FINDINGS:
- * The following methods in Blockchain.ts appear to be UNUSED (no callers found):
- * - removeNode() - line 535
- * - healthCheck() - line 548
- * - makeRpcCallViaPublicEndpoint() - line 1010 (note: other ViaPublicEndpoint methods ARE used)
- * - makeConsensusRpcCallViaPublicEndpoint() - line 1040
- *
  * DEPRECATED methods (naming convention update):
  * - getPublicEndpoint() -> getExecuteLayerRpcUrl()
- * - getPublicConsensusEndpoint() -> getConsensusLayerRpcUrl()
  */
 
 describe('Blockchain', () => {

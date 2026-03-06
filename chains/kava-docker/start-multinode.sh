@@ -89,12 +89,5 @@ echo "   Validator 3:     RPC=:46657  REST=:31317  EVM=:38545"
 echo "   Validator 4:     RPC=:56657  REST=:41317  EVM=:48545"
 echo ""
 
-# Print founder wallet info if available
-if [ -f "${SCRIPT_DIR}/.founder-info" ]; then
-    echo "📋 Founder Wallet (from .founder-info):"
-    grep -v "^#" "${SCRIPT_DIR}/.founder-info" | sed 's/^/   /'
-    echo ""
-fi
-
 echo "To stop: ./stop-multinode.sh"
 echo ""

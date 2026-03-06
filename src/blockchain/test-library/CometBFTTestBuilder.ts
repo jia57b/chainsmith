@@ -1064,7 +1064,7 @@ export class CometBFTTestBuilder {
                                 type: 'object',
                                 properties: {
                                     code: { type: 'integer' },
-                                    data: { type: 'string' },
+                                    data: { type: ['string', 'null'] },
                                     log: { type: 'string' },
                                     info: { type: 'string' },
                                     gas_wanted: { type: 'string' },
@@ -1691,9 +1691,9 @@ export class CometBFTTestBuilder {
                                 },
                                 commit_round: { type: 'integer' },
                                 last_commit: {
-                                    nullable: true,
-                                    required: ['votes', 'votes_bit_array', 'peer_maj_23s'],
+                                    type: ['object', 'null'],
                                     properties: {
+                                        // Old Tendermint fields
                                         votes: {
                                             type: 'array',
                                             items: { type: 'string' },
@@ -1704,7 +1704,6 @@ export class CometBFTTestBuilder {
                                             type: 'object',
                                         },
                                     },
-                                    type: 'object',
                                 },
                                 last_validators: {
                                     required: ['validators', 'proposer'],
@@ -2593,11 +2592,13 @@ export class CometBFTTestBuilder {
             properties: {
                 error: { type: 'string' },
                 result: {
-                    required: ['height', 'hash', 'tx_result', 'check_tx'],
+                    required: ['height', 'hash', 'check_tx'],
                     properties: {
                         height: { type: 'string' },
                         hash: { type: 'string' },
+                        // CometBFT 0.38+ uses 'tx_result'; older Tendermint uses 'deliver_tx'
                         tx_result: CometBFTTestBuilder.check_txResponseSchema,
+                        deliver_tx: CometBFTTestBuilder.check_txResponseSchema,
                         check_tx: CometBFTTestBuilder.check_txResponseSchema,
                     },
                     type: 'object',

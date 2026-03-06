@@ -16,7 +16,20 @@ on:
                     - 0g-docker
                     - story-docker
                     - kava-docker
-
+                    - mezo-docker
+            tests:
+                description: 'Run tests'
+                required: false
+                default: 'all'
+                type: choice
+                options:
+                    - all
+                    - basic
+                    - rpc:evm
+                    - rpc:cometbft
+                    - performance
+                    - load:stress
+                    - fault-tolerance
 # Top-level permissions: minimal read-only
 permissions:
     contents: read
@@ -69,6 +82,12 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "story-docker" ]; then
                     git clone https://github.com/piplabs/story.git
                     git clone https://github.com/piplabs/story-geth.git
+                  elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                    echo "Building mezo/mezod Docker image from source..."
+                    git clone --depth 1 https://github.com/mezo-org/mezod.git /tmp/mezod-src
+                    cd /tmp/mezod-src
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t mezo/mezod:latest .
+                    echo "mezo/mezod:latest built successfully"
                   fi
 
             - name: Initialize multinode localnet
@@ -84,6 +103,9 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "kava-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                    chmod +x init-testnet.sh
+                    ./init-testnet.sh
                   fi
 
             - name: Start localnet
@@ -101,6 +123,11 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "kava-docker" ]; then
                     chmod +x start-multinode.sh
                     ./start-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                    docker compose up -d
+                    echo "Waiting 15s for containers to start..."
+                    sleep 15
+                    docker compose ps
                   fi
 
             - name: Wait for chain readiness
@@ -122,7 +149,12 @@ jobs:
                   done
                   if [ "$HEIGHT" -le 2 ] 2>/dev/null; then
                     echo "❌ Chain failed to produce blocks within timeout"
-                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    cd chains/${CHAIN_ENV}
+                    if [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                      docker compose logs --tail=50 2>/dev/null || true
+                    else
+                      docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    fi
                     exit 1
                   fi
                   # Verify height increases over two 10-second intervals
@@ -133,7 +165,12 @@ jobs:
                   echo "  Check 2: height = $HEIGHT2 (must be > $HEIGHT1)"
                   if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
-                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    cd chains/${CHAIN_ENV}
+                    if [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                      docker compose logs --tail=50 2>/dev/null || true
+                    else
+                      docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    fi
                     exit 1
                   fi
                   echo "  Check 2 passed, waiting 10s..."
@@ -142,7 +179,12 @@ jobs:
                   echo "  Check 3: height = $HEIGHT3 (must be > $HEIGHT2)"
                   if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
-                    docker compose -f chains/${CHAIN_ENV}/docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    cd chains/${CHAIN_ENV}
+                    if [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                      docker compose logs --tail=50 2>/dev/null || true
+                    else
+                      docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    fi
                     exit 1
                   fi
                   echo "✅ Chain is producing blocks (heights: $HEIGHT1 -> $HEIGHT2 -> $HEIGHT3)"
@@ -167,14 +209,17 @@ jobs:
 
             # ─── Run Tests ──────────────────────────────────────────
             - name: Test - Basic
+              if: inputs.tests == 'all' || inputs.tests == 'basic'
               continue-on-error: true
               run: pnpm test:basic
 
             - name: Test - EVM RPC
+              if: inputs.tests == 'all' || inputs.tests == 'rpc:evm'
               continue-on-error: true
               run: pnpm test:rpc:evm
 
             - name: Test - CometBFT RPC
+              if: inputs.tests == 'all' || inputs.tests == 'rpc:cometbft'
               continue-on-error: true
               run: pnpm test:rpc:cometbft
 
@@ -183,14 +228,17 @@ jobs:
             #   run: pnpm test:cosmos:api:sample
 
             - name: Test - Performance
+              if: inputs.tests == 'all' || inputs.tests == 'performance'
               continue-on-error: true
               run: pnpm test:performance
 
             - name: Test - Load Stress
+              if: inputs.tests == 'all' || inputs.tests == 'load:stress'
               continue-on-error: true
               run: pnpm test:load:stress
 
             - name: Test - Fault Tolerance
+              if: inputs.tests == 'all' || inputs.tests == 'fault-tolerance'
               continue-on-error: true
               run: pnpm test:fault-tolerance
 
@@ -230,6 +278,12 @@ jobs:
                     cd story-localnet
                     echo "=== Story validator1 logs (last 100 lines) ==="
                     docker compose -f docker-compose-validator1.yml logs validator1-node --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                    echo "=== Mezo validator-0 logs (last 100 lines) ==="
+                    docker compose logs mezo-validator-0 --tail=100 2>/dev/null || true
+                    echo ""
+                    echo "=== Mezo validator-1 logs (last 100 lines) ==="
+                    docker compose logs mezo-validator-1 --tail=100 2>/dev/null || true
                   fi
 
             - name: Stop localnet
@@ -242,6 +296,8 @@ jobs:
                     docker compose -f docker-compose.multinode.yml down -v 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "story-docker" ]; then
                     cd story-localnet && docker compose -f docker-compose-bootnode1.yml -f docker-compose-validator1.yml -f docker-compose-validator2.yml -f docker-compose-validator3.yml -f docker-compose-validator4.yml -f docker-compose-rpc1.yml down -v 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                    docker compose down -v 2>/dev/null || true
                   fi
 
     # ─── Deploy Report to GitHub Pages ──────────────────────────

@@ -321,16 +321,6 @@ else
 fi
 echo "   ✅ Updated PERSISTENT_PEERS in .env.multinode"
 
-# Save founder info for reference
-FOUNDER_INFO_FILE="${SCRIPT_DIR}/.founder-info"
-cat > "$FOUNDER_INFO_FILE" <<EOF
-# Kava Localnet Founder Wallet Info (auto-generated)
-FOUNDER_COSMOS_ADDR=${FOUNDER_ADDR}
-FOUNDER_ETH_ADDR=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-FOUNDER_ETH_PRIVKEY=0x${FOUNDER_ETH_PRIVKEY}
-EOF
-echo "   ✅ Saved founder info to .founder-info"
-
 echo ""
 echo "============================================"
 echo "  ✅ Initialization complete!"

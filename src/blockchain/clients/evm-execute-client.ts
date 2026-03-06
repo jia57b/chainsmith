@@ -16,6 +16,7 @@ import {
 } from '../types';
 import { ethers } from 'ethers';
 import axios from 'axios';
+import { validateSchema, formatValidationErrors } from '../../utils/schema-validator';
 
 export class EVMExecuteClient implements IExecuteLayerClient {
     readonly config: IClientConfig;
@@ -184,7 +185,7 @@ export class EVMExecuteClient implements IExecuteLayerClient {
 
         while (attempts < maxAttempts) {
             const tx = await this.getTransaction(hash);
-            if (tx && tx.status === 'success' && tx.blockNumber && tx.blockNumber > 0) {
+            if (tx?.status === 'success' && tx.blockNumber && tx.blockNumber > 0) {
                 // Check confirmation count
                 const blockRequest: Request = {
                     jsonrpc: '2.0',
@@ -296,10 +297,38 @@ export class EVMExecuteClient implements IExecuteLayerClient {
     }
 
     /**
-     * Public RPC call method for test compatibility
-     * Compatible with evmRequest signature: (request, requestSchema?, responseSchema?)
+     * Public RPC call method for test compatibility.
+     * Validates request params and response result against JSON Schemas when provided.
+     *
+     * - requestSchema validates `request.params`
+     * - responseSchema validates `response.result` (the JSON-RPC result payload)
      */
-    async makeRpcCall(request: Request, _requestSchema?: any, _responseSchema?: any): Promise<Response> {
-        return await this.makeRpcRequest(request);
+    async makeRpcCall(request: Request, requestSchema?: any, responseSchema?: any): Promise<Response> {
+        if (requestSchema && request.params) {
+            const validation = validateSchema(request.params, requestSchema);
+            if (!validation.valid) {
+                console.warn(
+                    `⚠️  EVM RPC request schema validation warning [${request.method}]:\n${formatValidationErrors(validation.errors)}`
+                );
+            }
+        }
+
+        const response = await this.makeRpcRequest(request);
+
+        // Validate response.result against the schema unless the RPC returned an error
+        const rpcResponse = response as any;
+        if (responseSchema && !rpcResponse.error) {
+            const validation = validateSchema(rpcResponse.result, responseSchema);
+            if (!validation.valid) {
+                const resultPreview = JSON.stringify(rpcResponse.result)?.substring(0, 500);
+                const errorMsg =
+                    `EVM RPC response schema validation failed [${request.method}]:\n` +
+                    `${formatValidationErrors(validation.errors)}\n` +
+                    `  Actual result: ${resultPreview}`;
+                throw new Error(errorMsg);
+            }
+        }
+
+        return response;
     }
 }

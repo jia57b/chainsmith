@@ -24,7 +24,6 @@ if [ "$1" = "--clean" ]; then
         docker volume rm -f kava_validator${i}_home 2>/dev/null || true
     done
     rm -f "${SCRIPT_DIR}/.env.multinode" 2>/dev/null || true
-    rm -f "${SCRIPT_DIR}/.founder-info" 2>/dev/null || true
     echo "   ✅ Volumes and config cleaned"
     echo "   Run ./init-multinode.sh to re-initialize"
 fi
