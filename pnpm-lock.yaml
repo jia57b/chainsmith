@@ -7,6 +7,9 @@ settings:
 importers:
     .:
         dependencies:
+            ajv:
+                specifier: ^8.18.0
+                version: 8.18.0
             axios:
                 specifier: ^1.6.8
                 version: 1.9.0
