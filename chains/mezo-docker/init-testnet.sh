@@ -26,8 +26,14 @@ BASE_DIR="${SCRIPT_DIR}/testnet-data"
 SOURCE_BTC_TOKEN="0x0000000000000000000000000000000000000000"
 TOTAL_STEPS=6
 
-# Hardhat Account #0 — consistent with kava-docker, 0g-docker, story-docker
-FOUNDER_ETH_PRIVKEY="ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+# Hardhat Account #0 — injected from environment variable TEST_WALLET_PRIVATE_KEY
+if [ -z "$TEST_WALLET_PRIVATE_KEY" ]; then
+  echo "❌ Error: TEST_WALLET_PRIVATE_KEY environment variable is not set."
+  echo "   Please set it before running this script (e.g., export TEST_WALLET_PRIVATE_KEY=0x...)"
+  exit 1
+fi
+# Strip 0x prefix if present
+FOUNDER_ETH_PRIVKEY="${TEST_WALLET_PRIVATE_KEY#0x}"
 FOUNDER_ETH_ADDR="0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
 FOUNDER_MEZO_ADDR="mezo17w0adeg64ky0daxwd2ugyuneellmjgnx5qukc3"
 FOUNDER_BALANCE_ABTC="10000000000000000000000000000"

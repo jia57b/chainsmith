@@ -33,8 +33,14 @@ VALIDATOR_BALANCE="1000000000000${DENOM}"    # 1,000,000 KAVA per validator
 VALIDATOR_STAKE="100000000000${DENOM}"       # 100,000 KAVA staked per validator
 FOUNDER_BALANCE="10000000000000${DENOM}"     # 10,000,000 KAVA for test wallet
 
-# Hardhat Account #0 private key (consistent with 0g-docker and story-docker)
-FOUNDER_ETH_PRIVKEY="ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80"
+# Hardhat Account #0 private key — injected from environment variable TEST_WALLET_PRIVATE_KEY
+if [ -z "$TEST_WALLET_PRIVATE_KEY" ]; then
+  echo "❌ Error: TEST_WALLET_PRIVATE_KEY environment variable is not set."
+  echo "   Please set it before running this script (e.g., export TEST_WALLET_PRIVATE_KEY=0x...)"
+  exit 1
+fi
+# Strip 0x prefix if present
+FOUNDER_ETH_PRIVKEY="${TEST_WALLET_PRIVATE_KEY#0x}"
 
 NUM_VALIDATORS=4
 TOTAL_STEPS=11

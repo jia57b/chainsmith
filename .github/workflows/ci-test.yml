@@ -46,6 +46,7 @@ jobs:
         timeout-minutes: 30
         env:
             CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
+            TEST_WALLET_PRIVATE_KEY: ${{ secrets.TEST_WALLET_PRIVATE_KEY }}
 
         steps:
             # ─── Setup ───────────────────────────────────────────────
@@ -184,7 +185,9 @@ jobs:
             # ─── Test Configuration ─────────────────────────────────
             - name: Generate test configuration
               run: |
-                  cp tests/config_temp.json tests/config.json
+                  jq --arg pk "${TEST_WALLET_PRIVATE_KEY}" '
+                    map_values(if type == "object" and has("founderWallet") then .founderWallet.privateKey = $pk else . end)
+                  ' tests/config_temp.json > tests/config.json
 
             - name: Copy and generate load test configuration
               run: |
