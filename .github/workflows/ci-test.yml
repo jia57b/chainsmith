@@ -126,10 +126,10 @@ jobs:
                     chmod +x start-multinode.sh
                     ./start-multinode.sh
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                    docker compose up -d
+                    docker compose -f docker-compose.multinode.yml up -d
                     echo "Waiting 15s for containers to start..."
                     sleep 15
-                    docker compose ps
+                    docker compose -f docker-compose.multinode.yml ps
                   fi
 
             - name: Wait for chain readiness
@@ -152,11 +152,7 @@ jobs:
                   if [ "$HEIGHT" -le 2 ] 2>/dev/null; then
                     echo "❌ Chain failed to produce blocks within timeout"
                     cd chains/${CHAIN_ENV}
-                    if [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                      docker compose logs --tail=50 2>/dev/null || true
-                    else
-                      docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
-                    fi
+                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   # Verify height increases over two 10-second intervals
@@ -168,11 +164,7 @@ jobs:
                   if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
                     cd chains/${CHAIN_ENV}
-                    if [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                      docker compose logs --tail=50 2>/dev/null || true
-                    else
-                      docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
-                    fi
+                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   echo "  Check 2 passed, waiting 10s..."
@@ -182,11 +174,7 @@ jobs:
                   if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
                     cd chains/${CHAIN_ENV}
-                    if [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                      docker compose logs --tail=50 2>/dev/null || true
-                    else
-                      docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
-                    fi
+                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   echo "✅ Chain is producing blocks (heights: $HEIGHT1 -> $HEIGHT2 -> $HEIGHT3)"
@@ -282,10 +270,10 @@ jobs:
                     docker compose -f docker-compose-validator1.yml logs validator1-node --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
                     echo "=== Mezo validator-0 logs (last 100 lines) ==="
-                    docker compose logs mezo-validator-0 --tail=100 2>/dev/null || true
+                    docker compose -f docker-compose.multinode.yml logs mezo-validator-0 --tail=100 2>/dev/null || true
                     echo ""
                     echo "=== Mezo validator-1 logs (last 100 lines) ==="
-                    docker compose logs mezo-validator-1 --tail=100 2>/dev/null || true
+                    docker compose -f docker-compose.multinode.yml logs mezo-validator-1 --tail=100 2>/dev/null || true
                   fi
 
             - name: Stop localnet
@@ -299,7 +287,7 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "story-docker" ]; then
                     cd story-localnet && docker compose -f docker-compose-bootnode1.yml -f docker-compose-validator1.yml -f docker-compose-validator2.yml -f docker-compose-validator3.yml -f docker-compose-validator4.yml -f docker-compose-rpc1.yml down -v 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                    docker compose down -v 2>/dev/null || true
+                    docker compose -f docker-compose.multinode.yml down -v 2>/dev/null || true
                   fi
 
     # ─── Deploy Report to GitHub Pages ──────────────────────────
