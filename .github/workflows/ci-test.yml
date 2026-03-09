@@ -17,6 +17,7 @@ on:
                     - story-docker
                     - kava-docker
                     - mezo-docker
+                    - kii-docker
             tests:
                 description: 'Run tests'
                 required: false
@@ -90,6 +91,12 @@ jobs:
                     cd /tmp/mezod-src
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t mezo/mezod:latest .
                     echo "mezo/mezod:latest built successfully"
+                  elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
+                    echo "Building kiichain/kiichaind Docker image from source..."
+                    git clone --depth 1 --branch v7.0.1 https://github.com/KiiChain/kiichain.git /tmp/kiichain-src
+                    cd /tmp/kiichain-src
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t kiichain/kiichaind:latest .
+                    echo "kiichain/kiichaind:latest built successfully"
                   fi
 
             - name: Initialize multinode localnet
@@ -107,6 +114,9 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   fi
@@ -131,6 +141,9 @@ jobs:
                     echo "Waiting 15s for containers to start..."
                     sleep 15
                     docker compose -f docker-compose.multinode.yml ps
+                  elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
+                    chmod +x start-multinode.sh
+                    ./start-multinode.sh
                   fi
 
             - name: Wait for chain readiness
@@ -277,6 +290,9 @@ jobs:
                     echo ""
                     echo "=== Mezo validator-1 logs (last 100 lines) ==="
                     docker compose -f docker-compose.multinode.yml logs mezo-validator-1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
+                    echo "=== Kii validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.multinode.yml logs kii-validator1 --tail=100 2>/dev/null || true
                   fi
 
             - name: Stop localnet
@@ -291,6 +307,8 @@ jobs:
                     cd story-localnet && docker compose -f docker-compose-bootnode1.yml -f docker-compose-validator1.yml -f docker-compose-validator2.yml -f docker-compose-validator3.yml -f docker-compose-validator4.yml -f docker-compose-rpc1.yml down -v 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
                     docker compose -f docker-compose.multinode.yml down -v 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
+                    ./stop-multinode.sh --clean 2>/dev/null || true
                   fi
 
     # ─── Deploy Report to GitHub Pages ──────────────────────────

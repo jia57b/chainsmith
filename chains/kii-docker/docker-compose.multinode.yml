@@ -1,0 +1,168 @@
+# docker-compose.multinode.yml
+# Kii 4-Validator Localnet for ChainSmith Testing
+#
+# Architecture: Each validator = 1 kiichaind container (CometBFT consensus + EVM in same process)
+# Similar to Kava, Kii does NOT need separate geth containers.
+#
+# Usage:
+#   1. Init: ./init-multinode.sh
+#   2. Start: ./start-multinode.sh (or: docker compose --env-file .env.multinode -f docker-compose.multinode.yml up -d)
+#   3. Check: docker compose --env-file .env.multinode -f docker-compose.multinode.yml ps
+#   4. Logs:  docker compose --env-file .env.multinode -f docker-compose.multinode.yml logs -f kii-validator1
+#   5. Stop:  ./stop-multinode.sh
+
+services:
+    # ============ Validator 1 ============
+    kii-validator1:
+        image: kiichain/kiichaind:${KII_TAG:-latest}
+        pull_policy: never
+        restart: unless-stopped
+        user: root
+        networks:
+            kii-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        entrypoint: ['kiichaind']
+        command: >
+            start
+            --home /root/.kiichain
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "1000000000akii"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: kii_validator1_home
+              target: /root/.kiichain
+        ports:
+            - '26657:26657' # CometBFT RPC
+            - '1317:1317' # Cosmos REST API
+            - '8545:8545' # EVM JSON-RPC
+            - '8546:8546' # EVM WebSocket
+            - '9090:9090' # gRPC
+            - '26656:26656' # P2P
+
+    # ============ Validator 2 ============
+    kii-validator2:
+        image: kiichain/kiichaind:${KII_TAG:-latest}
+        pull_policy: never
+        restart: unless-stopped
+        user: root
+        networks:
+            kii-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        entrypoint: ['kiichaind']
+        command: >
+            start
+            --home /root/.kiichain
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "1000000000akii"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: kii_validator2_home
+              target: /root/.kiichain
+        ports:
+            - '36657:26657' # CometBFT RPC
+            - '21317:1317' # Cosmos REST API
+            - '28545:8545' # EVM JSON-RPC
+            - '36656:26656' # P2P
+
+    # ============ Validator 3 ============
+    kii-validator3:
+        image: kiichain/kiichaind:${KII_TAG:-latest}
+        pull_policy: never
+        restart: unless-stopped
+        user: root
+        networks:
+            kii-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        entrypoint: ['kiichaind']
+        command: >
+            start
+            --home /root/.kiichain
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "1000000000akii"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: kii_validator3_home
+              target: /root/.kiichain
+        ports:
+            - '46657:26657' # CometBFT RPC
+            - '31317:1317' # Cosmos REST API
+            - '38545:8545' # EVM JSON-RPC
+            - '46656:26656' # P2P
+
+    # ============ Validator 4 ============
+    kii-validator4:
+        image: kiichain/kiichaind:${KII_TAG:-latest}
+        pull_policy: never
+        restart: unless-stopped
+        user: root
+        networks:
+            kii-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        entrypoint: ['kiichaind']
+        command: >
+            start
+            --home /root/.kiichain
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "1000000000akii"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: kii_validator4_home
+              target: /root/.kiichain
+        ports:
+            - '56657:26657' # CometBFT RPC
+            - '41317:1317' # Cosmos REST API
+            - '48545:8545' # EVM JSON-RPC
+            - '56656:26656' # P2P
+
+volumes:
+    kii_validator1_home:
+        external: true
+        name: kii_validator1_home
+    kii_validator2_home:
+        external: true
+        name: kii_validator2_home
+    kii_validator3_home:
+        external: true
+        name: kii_validator3_home
+    kii_validator4_home:
+        external: true
+        name: kii_validator4_home
+
+networks:
+    kii-multi:
