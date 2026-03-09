@@ -107,8 +107,8 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                    chmod +x init-testnet.sh
-                    ./init-testnet.sh
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
                   fi
 
             - name: Start localnet
@@ -187,7 +187,7 @@ jobs:
               run: |
                   jq --arg pk "${TEST_WALLET_PRIVATE_KEY}" '
                     map_values(if type == "object" and has("founderWallet") then .founderWallet.privateKey = $pk else . end)
-                  ' tests/config_temp.json > tests/config.json
+                  ' tests/config.ci.json > tests/config.json
 
             - name: Copy and generate load test configuration
               run: |
