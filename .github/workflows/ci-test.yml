@@ -82,6 +82,7 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "story-docker" ]; then
                     git clone https://github.com/piplabs/story.git
                     git clone https://github.com/piplabs/story-geth.git
+                    git clone https://github.com/piplabs/story-localnet.git
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
                     echo "Building mezo/mezod Docker image from source..."
                     git clone --depth 1 https://github.com/mezo-org/mezod.git /tmp/mezod-src
@@ -97,6 +98,7 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cp generate_docker_compose.sh story-localnet/generate_docker_compose.sh
                     cd story-localnet
                     chmod +x generate_docker_compose.sh
                     ./generate_docker_compose.sh
