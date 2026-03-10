@@ -217,7 +217,7 @@ jobs:
               run: pnpm test:rpc:cometbft
 
             - name: Test - Cosmos API
-              if: inputs.tests == 'all' || (inputs.chain != 'mezo-docker' && inputs.chain != '0g-docker')
+              if: inputs.tests == 'all'
               continue-on-error: true
               run: pnpm test:cosmos:api:sample
 

@@ -12,10 +12,16 @@ export class CosmosApiTestBuilder {
     private consensusClient: IConsensusLayerClient;
     private testResults: Map<string, any> = new Map();
     private validators: any[] = [];
+    private supportedModules: string[];
 
-    constructor(blockchain: Blockchain) {
+    constructor(blockchain: Blockchain, supportedModules: string[] = []) {
         this.blockchain = blockchain;
         this.consensusClient = blockchain.getDefaultConsensusLayerClient();
+        this.supportedModules = supportedModules;
+    }
+
+    private isModuleSupported(moduleName: string): boolean {
+        return this.supportedModules.includes(moduleName);
     }
 
     /**
@@ -45,6 +51,10 @@ export class CosmosApiTestBuilder {
      * Validates field-level structure of validators, params, and pool responses.
      */
     async testStakingModule(): Promise<CosmosApiTestBuilder> {
+        if (!this.isModuleSupported('staking')) {
+            console.log(`\n⏭️  Skipping Staking Module (not in supportedCosmosModules)`);
+            return this;
+        }
         console.log(`\n⚡ Testing Staking Module APIs (Default Paths)`);
 
         try {
@@ -191,6 +201,10 @@ export class CosmosApiTestBuilder {
      * Picks the first validator from cached list (requires testStakingModule() first).
      */
     async testValidatorDetail(): Promise<CosmosApiTestBuilder> {
+        if (!this.isModuleSupported('staking_delegation')) {
+            console.log(`\n⏭️  Skipping Validator Detail (not in supportedCosmosModules)`);
+            return this;
+        }
         if (this.validators.length === 0) {
             this.testResults.set('staking_validator_detail', {
                 success: false,
@@ -239,6 +253,10 @@ export class CosmosApiTestBuilder {
      * 3. Use that delegator address to query delegator-side APIs
      */
     async testValidatorDelegations(): Promise<CosmosApiTestBuilder> {
+        if (!this.isModuleSupported('staking_delegation')) {
+            console.log(`\n⏭️  Skipping Validator Delegations (not in supportedCosmosModules)`);
+            return this;
+        }
         if (this.validators.length === 0) {
             this.testResults.set('staking_validator_delegations', {
                 success: false,
@@ -284,16 +302,19 @@ export class CosmosApiTestBuilder {
      * Test Slashing Module APIs
      */
     async testSlashingModule(): Promise<CosmosApiTestBuilder> {
+        if (!this.isModuleSupported('slashing')) {
+            console.log(`\n⏭️  Skipping Slashing Module (not in supportedCosmosModules)`);
+            return this;
+        }
         console.log(`\n⚔️ Testing Slashing Module APIs`);
 
         try {
-            // Get slashing parameters
             const paramsResponse = await this.consensusClient.getSlashingParams();
             this.testResults.set('slashing_params', { success: true, data: paramsResponse });
             console.log(`   ✅ Slashing parameters retrieved`);
         } catch (error: any) {
-            this.testResults.set('slashing_module', { success: false, error: error.message });
-            console.log(`   ❌ Slashing module tests failed: ${error.message}`);
+            this.testResults.set('slashing_params', { success: false, error: error.message });
+            console.log(`   ❌ Slashing params query failed: ${error.message}`);
         }
 
         return this;
@@ -303,16 +324,19 @@ export class CosmosApiTestBuilder {
      * Test Mint Module APIs
      */
     async testMintModule(): Promise<CosmosApiTestBuilder> {
+        if (!this.isModuleSupported('mint')) {
+            console.log(`\n⏭️  Skipping Mint Module (not in supportedCosmosModules)`);
+            return this;
+        }
         console.log(`\n🪙 Testing Mint Module APIs`);
 
         try {
-            // Get mint parameters
             const paramsResponse = await this.consensusClient.getMintParams();
             this.testResults.set('mint_params', { success: true, data: paramsResponse });
             console.log(`   ✅ Mint parameters retrieved`);
         } catch (error: any) {
-            this.testResults.set('mint_module', { success: false, error: error.message });
-            console.log(`   ❌ Mint module tests failed: ${error.message}`);
+            this.testResults.set('mint_params', { success: false, error: error.message });
+            console.log(`   ❌ Mint params query failed: ${error.message}`);
         }
 
         return this;
@@ -368,6 +392,7 @@ export class CosmosApiTestBuilder {
 
         let successCount = 0;
         let totalCount = 0;
+        const failedTests: string[] = [];
 
         for (const [testName, result] of this.testResults) {
             totalCount++;
@@ -375,27 +400,14 @@ export class CosmosApiTestBuilder {
                 successCount++;
                 console.log(`   ✅ ${testName}: PASSED`);
             } else {
+                failedTests.push(testName);
                 console.log(`   ❌ ${testName}: FAILED - ${result.error}`);
             }
         }
 
         console.log(`\n📈 Summary: ${successCount}/${totalCount} tests passed`);
 
-        // Assert overall success rate
-        const successRate = successCount / totalCount;
-        expect(successRate).to.be.greaterThan(
-            0.3,
-            `Expected at least 30% success rate, got ${(successRate * 100).toFixed(1)}%`
-        );
-
-        // Ensure at least some core functions are working properly
-        const coreTests = ['staking_validators_default', 'tendermint_status', 'tendermint_block'];
-        const coreSuccessCount = coreTests.filter(test => {
-            const result = this.testResults.get(test);
-            return result?.success;
-        }).length;
-
-        expect(coreSuccessCount).to.be.greaterThan(0, 'Expected at least one core test to pass');
+        expect(successCount).to.equal(totalCount, `All supported modules must pass. Failed: ${failedTests.join(', ')}`);
 
         return this;
     }

@@ -15,6 +15,7 @@
     },
     "chain-1": {
         "description": "Local development chain",
+        "supportedCosmosModules": [],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": "<YOUR_CHAIN_ID>",
@@ -75,6 +76,7 @@
     },
     "devnet": {
         "description": "Remote devnet environment",
+        "supportedCosmosModules": [],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": "<YOUR_CHAIN_ID>",

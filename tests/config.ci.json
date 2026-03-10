@@ -20,6 +20,7 @@
     },
     "0g-docker": {
         "description": "0G v2 Local Multi-Validator Devnet (4 validators)",
+        "supportedCosmosModules": [],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": 16601,
@@ -91,6 +92,7 @@
     },
     "story-docker": {
         "description": "Story Local Devnet (4 validators + 1 bootnode + 1 RPC)",
+        "supportedCosmosModules": ["staking", "staking_delegation", "slashing", "mint"],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": 1513,
@@ -173,6 +175,7 @@
     },
     "kava-docker": {
         "description": "Kava Local Devnet (kvtool single node)",
+        "supportedCosmosModules": ["staking", "staking_delegation", "slashing", "mint"],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": 2222,
@@ -244,6 +247,7 @@
     },
     "mezo-docker": {
         "description": "Mezo Local Multi-Validator Devnet (4 validators, Evmos fork)",
+        "supportedCosmosModules": [],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": 31612,
@@ -315,6 +319,7 @@
     },
     "kii-docker": {
         "description": "Kii Local Multi-Validator Devnet (4 validators, CometBFT + EVM)",
+        "supportedCosmosModules": ["staking", "staking_delegation", "slashing"],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": 1010,
