@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+    tac-node-0:
+        image: tacchain:local
+        container_name: tac-node-0
+        volumes:
+            - ./tacchain/.testnet/node0:/root/.tacchaind
+        command: ['tacchaind', 'start']
+        ports:
+            - '45110:45110' # P2P
+            - '45111:45111' # RPC
+            - '45112:45112' # API
+            - '45118:45118' # EVM JSON-RPC
+        networks:
+            - tac-net
+
+    tac-node-1:
+        image: tacchain:local
+        container_name: tac-node-1
+        volumes:
+            - ./tacchain/.testnet/node1:/root/.tacchaind
+        command: ['tacchaind', 'start']
+        ports:
+            - '45120:45120'
+            - '45121:45121'
+            - '45122:45122'
+            - '45128:45128'
+        networks:
+            - tac-net
+        depends_on:
+            - tac-node-0
+
+    tac-node-2:
+        image: tacchain:local
+        container_name: tac-node-2
+        volumes:
+            - ./tacchain/.testnet/node2:/root/.tacchaind
+        command: ['tacchaind', 'start']
+        ports:
+            - '45130:45130'
+            - '45131:45131'
+            - '45132:45132'
+            - '45138:45138'
+        networks:
+            - tac-net
+        depends_on:
+            - tac-node-0
+
+    tac-node-3:
+        image: tacchain:local
+        container_name: tac-node-3
+        volumes:
+            - ./tacchain/.testnet/node3:/root/.tacchaind
+        command: ['tacchaind', 'start']
+        ports:
+            - '45140:45140'
+            - '45141:45141'
+            - '45142:45142'
+            - '45148:45148'
+        networks:
+            - tac-net
+        depends_on:
+            - tac-node-0
+
+networks:
+    tac-net:
+        driver: bridge

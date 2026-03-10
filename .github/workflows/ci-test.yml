@@ -18,6 +18,7 @@ on:
                     - kava-docker
                     - mezo-docker
                     - kii-docker
+                    - tac-docker
             tests:
                 description: 'Run tests'
                 required: false
@@ -97,6 +98,12 @@ jobs:
                     cd /tmp/kiichain-src
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t kiichain/kiichaind:latest .
                     echo "kiichain/kiichaind:latest built successfully"
+                  elif [ "${CHAIN_ENV}" = "tac-docker" ]; then
+                    echo "Building tacchain Docker image from source..."
+                    git clone --depth 1 https://github.com/TacBuild/tacchain.git /tmp/tacchain-src
+                    cd /tmp/tacchain-src
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t tacchain:local .
+                    echo "tacchain:local built successfully"
                   fi
 
             - name: Initialize multinode localnet
@@ -117,6 +124,9 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "tac-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   fi
@@ -140,9 +150,13 @@ jobs:
                   MAX_ATTEMPTS=60
                   ATTEMPT=0
                   HEIGHT=0
+                  PORT=26657
+                  if [ "${CHAIN_ENV}" = "tac-docker" ]; then
+                    PORT=45111
+                  fi
                   while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
                     ATTEMPT=$((ATTEMPT + 1))
-                    HEIGHT=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                    HEIGHT=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                     echo "  Attempt $ATTEMPT/$MAX_ATTEMPTS: block height = $HEIGHT"
                     if [ "$HEIGHT" -gt 2 ] 2>/dev/null; then
                       echo "✅ Initial height reached ($HEIGHT), verifying sustained block production..."
@@ -153,33 +167,33 @@ jobs:
                   if [ "$HEIGHT" -le 2 ] 2>/dev/null; then
                     echo "❌ Chain failed to produce blocks within timeout"
                     cd chains/${CHAIN_ENV}
-                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   # Verify height increases over two 10-second intervals
                   HEIGHT1=$HEIGHT
                   echo "  Check 1: height = $HEIGHT1, waiting 10s..."
                   sleep 10
-                  HEIGHT2=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  HEIGHT2=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                   echo "  Check 2: height = $HEIGHT2 (must be > $HEIGHT1)"
                   if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
                     cd chains/${CHAIN_ENV}
-                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   echo "  Check 2 passed, waiting 10s..."
                   sleep 10
-                  HEIGHT3=$(curl -s http://localhost:26657/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  HEIGHT3=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                   echo "  Check 3: height = $HEIGHT3 (must be > $HEIGHT2)"
                   if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
                     cd chains/${CHAIN_ENV}
-                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || true
+                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   echo "✅ Chain is producing blocks (heights: $HEIGHT1 -> $HEIGHT2 -> $HEIGHT3)"
-                  VALIDATORS=$(curl -s http://localhost:26657/validators | jq '.result.validators | length' 2>/dev/null || echo "0")
+                  VALIDATORS=$(curl -s http://localhost:${PORT}/validators | jq '.result.validators | length' 2>/dev/null || echo "0")
                   echo "✅ Active validators: $VALIDATORS"
 
             # ─── Test Configuration ─────────────────────────────────
@@ -286,6 +300,9 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "=== Kii validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.multinode.yml logs kii-validator1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "tac-docker" ]; then
+                    echo "=== Tac node0 logs (last 100 lines) ==="
+                    docker compose logs tac-node-0 --tail=100 2>/dev/null || true
                   fi
 
             - name: Stop localnet
