@@ -226,6 +226,21 @@ jobs:
               continue-on-error: true
               run: pnpm test:staking:sample
 
+            - name: Test - Fault Tolerance
+              if: inputs.tests == 'all' || inputs.tests == 'fault-tolerance'
+              continue-on-error: true
+              run: pnpm test:fault-tolerance
+
+            - name: Test - Performance
+              if: inputs.tests == 'all' || inputs.tests == 'performance'
+              continue-on-error: true
+              run: pnpm test:performance
+
+            - name: Test - Load Stress
+              if: inputs.tests == 'all' || inputs.tests == 'load:stress'
+              continue-on-error: true
+              run: pnpm test:load:stress
+
             # ─── Reports ────────────────────────────────────────────
             - name: Merge test reports
               if: always()
