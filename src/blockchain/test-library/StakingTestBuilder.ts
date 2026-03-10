@@ -1,16 +1,24 @@
 import { ethers } from 'ethers';
 import { Blockchain } from '../../core/Blockchain';
-import { BlockchainType } from '../../';
+import { BlockchainType, IConsensusLayerClient } from '../types';
+import { CosmosConsensusClient } from '../clients/cosmos-consensus-client';
+
+const DEFAULT_PRECOMPILE_ADDRESS = '0x0000000000000000000000000000000000000800';
+
+const DEFAULT_PRECOMPILE_ABI = [
+    'function delegate(address delegatorAddress, string validatorAddress, uint256 amount) external returns (bool success)',
+    'function undelegate(address delegatorAddress, string validatorAddress, uint256 amount) external returns (int64 completionTime)',
+    'function redelegate(address delegatorAddress, string validatorSrcAddress, string validatorDstAddress, uint256 amount) external returns (int64 completionTime)',
+    'function delegation(address delegatorAddress, string validatorAddress) external view returns (uint256 shares, tuple(string denom, uint256 amount) balance)',
+    'function unbondingDelegation(address delegatorAddress, string validatorAddress) external view returns (tuple(string delegatorAddress, string validatorAddress, tuple(int64 creationHeight, int64 completionTime, uint256 initialBalance, uint256 balance, uint64 unbondingId, int64 unbondingOnHoldRefCount)[] entries) unbondingDelegation)',
+    'function validator(address validatorAddress) external view returns (tuple(string operatorAddress, string consensusPubkey, bool jailed, uint8 status, uint256 tokens, uint256 delegatorShares, string description, int64 unbondingHeight, int64 unbondingTime, uint256 commission, uint256 minSelfDelegation) validator)',
+];
 
 /**
- * Staking Test Builder - for staking workflow testing
+ * Staking Test Builder - for staking workflow testing on Cosmos+EVM chains.
  *
- * Handles complete staking workflows including:
- * - Wallet preparation and funding
- * - Staking delegation operations
- * - Voting power analysis
- * - Unstaking/withdrawal operations
- * - Results analysis and cleanup
+ * Uses EVM staking precompile for delegation/undelegation.
+ * Requires Cosmos consensus layer for validator discovery and voting power queries.
  */
 export class StakingTestBuilder {
     private blockchain: Blockchain;
@@ -25,8 +33,14 @@ export class StakingTestBuilder {
     private votingPowerBefore: number = 0;
     private votingPowerAfterStake: number = 0;
     private votingPowerAfterUnstake: number = 0;
+    private tokensBefore: bigint = 0n;
+    private tokensAfterStake: bigint = 0n;
+    private tokensAfterUnstake: bigint = 0n;
     private founderWallet: ethers.Wallet;
     private provider: ethers.JsonRpcProvider;
+    private consensusClient: IConsensusLayerClient | null = null;
+    private precompileAddress: string = DEFAULT_PRECOMPILE_ADDRESS;
+    private precompileAbi: string[] = DEFAULT_PRECOMPILE_ABI;
 
     constructor(blockchain: Blockchain) {
         this.blockchain = blockchain;
@@ -39,10 +53,27 @@ export class StakingTestBuilder {
         }
 
         this.provider = this.blockchain.getDefaultExecuteLayerClient().getProvider();
-
         this.founderWallet = this.blockchain.createFounderEthersWallet();
 
-        console.log(`✅ Initialized StakingTestBuilder for ${blockchain.executeLayer} blockchain`);
+        if (this.blockchain.consensusLayer !== BlockchainType.COSMOS) {
+            throw new Error('Staking test requires Cosmos consensus layer (Cosmos+EVM chain)');
+        }
+        this.consensusClient = this.blockchain.getDefaultConsensusLayerClient();
+        console.log(`   Cosmos consensus layer detected`);
+    }
+
+    /**
+     * Override the precompile address and ABI.
+     */
+    withPrecompile(address?: string, abi?: string[]): StakingTestBuilder {
+        if (address) {
+            this.precompileAddress = address;
+        }
+        if (abi) {
+            this.precompileAbi = abi;
+        }
+        console.log(`   Using Precompile Address: ${this.precompileAddress}`);
+        return this;
     }
 
     /**
@@ -59,7 +90,7 @@ export class StakingTestBuilder {
      */
     withConfiguration(config: any): StakingTestBuilder {
         this.configuration = config;
-        console.log(`📋 Test Configuration:`);
+        console.log(`   Test Configuration:`);
         Object.entries(config).forEach(([key, value]) => {
             console.log(`   ${key}: ${value}`);
         });
@@ -67,107 +98,101 @@ export class StakingTestBuilder {
     }
 
     /**
-     * Set staking parameters
+     * Set staking parameters.
+     * For precompile mode, validatorAddress should be Cosmos bech32 format (e.g. kiivaloper1...).
+     * If not provided, it will be auto-discovered from the REST API.
      */
     withStakingParameters(params: { stakingAmount?: string; validatorAddress?: string }): StakingTestBuilder {
         this.stakingAmount = params.stakingAmount ?? this.stakingAmount;
         this.validatorAddress = params.validatorAddress;
-        console.log(`📊 Staking Parameters:`);
-        console.log(`   Staking Amount: ${this.stakingAmount} ETH`);
-        console.log(`   Validator Address: ${this.validatorAddress ?? 'Using founder wallet as validator'}`);
+        console.log(`   Staking Parameters:`);
+        console.log(`   Staking Amount: ${this.stakingAmount}`);
+        console.log(`   Validator Address: ${this.validatorAddress ?? '(auto-discover from REST API)'}`);
+        return this;
+    }
+
+    /**
+     * Discover the first active validator's operator_address via Cosmos REST API.
+     * Required for precompile mode if validatorAddress is not explicitly set.
+     */
+    async discoverValidator(): Promise<StakingTestBuilder> {
+        if (this.validatorAddress) {
+            console.log(`   Using provided validator: ${this.validatorAddress}`);
+            return this;
+        }
+
+        if (!this.consensusClient) {
+            throw new Error(
+                'Consensus layer client required for validator discovery. Set validatorAddress manually or ensure Cosmos consensus is configured.'
+            );
+        }
+
+        console.log(`\n   Discovering validators from Cosmos REST API...`);
+        const response = await this.consensusClient.getStakingValidators();
+        const validators = response.validators ?? [];
+
+        if (validators.length === 0) {
+            throw new Error('No validators found on chain');
+        }
+
+        // Pick the first bonded validator
+        const bonded = validators.find((v: any) => v.status === 'BOND_STATUS_BONDED');
+        const chosen = bonded ?? validators[0];
+        this.validatorAddress = chosen.operator_address;
+
+        console.log(`   Discovered validator: ${chosen.description?.moniker ?? 'Unknown'} (${this.validatorAddress})`);
+        console.log(`   Tokens: ${chosen.tokens}, Status: ${chosen.status}`);
+
         return this;
     }
 
     /**
      * Prepare wallets for staking tests
      */
-    async prepareWallets(count: number): Promise<StakingTestBuilder> {
-        console.log(`\n🔧 Preparing ${count} wallets for staking workflow...`);
+    async prepareWallets(count: number, fundingAmount: string = '1'): Promise<StakingTestBuilder> {
+        console.log(`\n   Preparing ${count} wallets for staking workflow...`);
 
-        // Use blockchain's common method to create and fund wallets
-        const { wallets, fundingTransactions } = await this.blockchain.createAndFundWallets(count, '0.2');
+        const { wallets, fundingTransactions } = await this.blockchain.createAndFundWallets(count, fundingAmount);
         this.wallets = wallets;
 
-        // Wait for all funding transactions to be confirmed
         await this.blockchain.waitForTransactionConfirmations(fundingTransactions);
 
-        console.log(`✅ Prepared ${this.wallets.length} wallets for staking workflow`);
+        console.log(`   Prepared ${this.wallets.length} wallets for staking workflow`);
         return this;
-    }
-
-    /**
-     * @deprecated Use blockchain.createAndFundWallets() instead
-     * Create wallets and fund them (simplified for sample)
-     */
-    private async createWallets(count: number, fundingTransactions: any[]): Promise<void> {
-        console.log(`   Generating ${count} new wallets...`);
-
-        // TODO: create a getProvider method in Blockchain class
-
-        this.wallets = Array.from({ length: count }, (_, i) => {
-            const wallet = this.blockchain.createWallet();
-            console.log(`   Generated wallet ${i + 1}: ${wallet.address}`);
-            return wallet;
-        });
-
-        console.log(`   ✅ Generated ${this.wallets.length} wallets`);
-        await this.fundWallets(this.wallets, fundingTransactions);
-    }
-
-    /**
-     * Fund a list of wallets
-     */
-    private async fundWallets(wallets: any[], fundingTransactions: any[]): Promise<void> {
-        console.log(`   🚀 Funding wallets with 0.2 ETH using founder wallet...`);
-
-        try {
-            const transactions = wallets.map(wallet => ({
-                to: wallet.address,
-                value: '0.2',
-            }));
-
-            // Use sendMultipleTransactions to avoid nonce conflicts
-            const results = await this.blockchain.sendMultipleTransactions(transactions, this.founderWallet);
-
-            results.forEach((tx: any, index) => {
-                if (tx) {
-                    console.log(`   📤 Funded wallet ${index + 1}: ${wallets[index].address} -> Hash: ${tx?.hash}`);
-                    fundingTransactions.push({
-                        wallet: wallets[index],
-                        tx,
-                        index: index + 1,
-                    });
-                }
-            });
-        } catch (error) {
-            console.error(`   ❌ Failed to fund wallets in batch:`, error);
-        }
     }
 
     /**
      * Execute complete staking workflow test
      */
     async executeStakingWorkflow(): Promise<StakingTestBuilder> {
-        console.log(`\n🚀 Starting complete staking workflow test...`);
+        console.log(`\n   Starting complete staking workflow test...`);
         this.startTime = Date.now();
 
-        // Step 1: Check initial voting power
+        if (!this.validatorAddress) {
+            await this.discoverValidator();
+        }
+
+        // Step 1: Record initial voting power
         await this.checkValidatorVotingPower('initial');
 
         // Step 2: Execute staking delegation
         await this.executeStakingStep();
 
-        // Step 3: Check voting power after staking
+        // Step 3: Wait for state to be committed before querying
+        console.log(`\n   Step 3: Waiting for 2 blocks for state to settle...`);
+        await this.blockchain.waitForBlocks(2, 3000);
         await this.checkValidatorVotingPower('after_stake');
 
-        // Step 4: Wait for some blocks (simulate staking period)
-        console.log(`\n⏳ Step 4: Waiting for 3 blocks...`);
-        await this.blockchain.waitForBlocks(3, 3000);
+        // Step 4: Wait for additional blocks
+        console.log(`\n   Step 4: Waiting for 2 blocks...`);
+        await this.blockchain.waitForBlocks(2, 3000);
 
-        // Step 5: Execute unstaking/withdrawal
+        // Step 5: Execute unstaking/undelegation
         await this.executeUnstakingStep();
 
-        // Step 6: Check voting power after unstaking
+        // Step 6: Wait for state to be committed before querying
+        console.log(`\n   Step 6: Waiting for 2 blocks for state to settle...`);
+        await this.blockchain.waitForBlocks(2, 3000);
         await this.checkValidatorVotingPower('after_unstake');
 
         this.endTime = Date.now();
@@ -175,18 +200,30 @@ export class StakingTestBuilder {
     }
 
     /**
+     * Execute only the delegation step (no unstaking, no voting power checks).
+     * Useful for simple stake-only tests.
+     */
+    async executeDelegation(): Promise<StakingTestBuilder> {
+        if (!this.validatorAddress) {
+            await this.discoverValidator();
+        }
+        await this.executeStakingStep();
+        return this;
+    }
+
+    /**
      * Execute staking delegation
      */
     private async executeStakingStep(): Promise<void> {
-        console.log(`\n📤 Step 2: Executing staking delegation...`);
+        console.log(`\n   Step 2: Executing staking delegation...`);
 
         const stakingResults = this.wallets.map(async (wallet, index) => {
             try {
-                console.log(`   📤 Wallet ${index + 1} delegating ${this.stakingAmount} ETH...`);
+                console.log(`   Wallet ${index + 1} delegating ${this.stakingAmount}...`);
 
                 const stakingTx = await this.performStakingDelegation(wallet, this.stakingAmount);
 
-                console.log(`   ✅ Wallet ${index + 1} staking successful: ${stakingTx.hash}`);
+                console.log(`   Wallet ${index + 1} staking successful: ${stakingTx.hash}`);
                 return {
                     success: true,
                     hash: stakingTx.hash,
@@ -196,7 +233,7 @@ export class StakingTestBuilder {
                     step: 'staking',
                 };
             } catch (error) {
-                console.error(`   ❌ Wallet ${index + 1} staking failed: ${error}`);
+                console.error(`   Wallet ${index + 1} staking failed: ${error}`);
                 return {
                     success: false,
                     error: error instanceof Error ? error.message : String(error),
@@ -212,22 +249,22 @@ export class StakingTestBuilder {
         this.testResults.push(...results);
 
         const successfulStaking = results.filter(r => r.success).length;
-        console.log(`   📊 Staking results: ${successfulStaking}/${this.wallets.length} successful`);
+        console.log(`   Staking results: ${successfulStaking}/${this.wallets.length} successful`);
     }
 
     /**
      * Execute unstaking/withdrawal
      */
     private async executeUnstakingStep(): Promise<void> {
-        console.log(`\n📤 Step 5: Executing unstaking/withdrawal...`);
+        console.log(`\n   Step 5: Executing unstaking/withdrawal...`);
 
         const unstakingResults = this.wallets.map(async (wallet, index) => {
             try {
-                console.log(`   📤 Wallet ${index + 1} unstaking ${this.stakingAmount} ETH...`);
+                console.log(`   Wallet ${index + 1} unstaking ${this.stakingAmount}...`);
 
                 const unstakingTx = await this.performStakingWithdrawal(wallet);
 
-                console.log(`   ✅ Wallet ${index + 1} unstaking successful: ${unstakingTx.hash}`);
+                console.log(`   Wallet ${index + 1} unstaking successful: ${unstakingTx.hash}`);
                 return {
                     success: true,
                     hash: unstakingTx.hash,
@@ -237,7 +274,7 @@ export class StakingTestBuilder {
                     step: 'unstaking',
                 };
             } catch (error) {
-                console.error(`   ❌ Wallet ${index + 1} unstaking failed: ${error}`);
+                console.error(`   Wallet ${index + 1} unstaking failed: ${error}`);
                 return {
                     success: false,
                     error: error instanceof Error ? error.message : String(error),
@@ -253,115 +290,242 @@ export class StakingTestBuilder {
         this.testResults.push(...results);
 
         const successfulUnstaking = results.filter(r => r.success).length;
-        console.log(`   📊 Unstaking results: ${successfulUnstaking}/${this.wallets.length} successful`);
+        console.log(`   Unstaking results: ${successfulUnstaking}/${this.wallets.length} successful`);
     }
 
     /**
-     * Check validator voting power at different stages
+     * Check validator voting power at different stages.
+     * Tracks both raw tokens (bigint, precise) and human-readable voting power.
      */
     private async checkValidatorVotingPower(stage: string): Promise<void> {
-        const validatorAddr = this.validatorAddress ?? this.founderWallet.address;
-        console.log(
-            `\n📊 Step ${stage === 'initial' ? '1' : stage === 'after_stake' ? '3' : '6'}: Checking validator voting power (${stage})...`
-        );
+        const stepNum = stage === 'initial' ? '1' : stage === 'after_stake' ? '3' : '6';
+        console.log(`\n   Step ${stepNum}: Checking validator voting power (${stage})...`);
 
         try {
-            const votingPower = await this.getValidatorVotingPower(validatorAddr);
+            const { votingPower, rawTokens } = await this.getValidatorVotingPowerDetailed();
+            const expectedChangeWei = ethers.parseEther(this.stakingAmount);
 
             switch (stage) {
                 case 'initial':
                     this.votingPowerBefore = votingPower;
-                    console.log(`   📊 Initial voting power: ${votingPower}`);
+                    this.tokensBefore = rawTokens;
+                    console.log(`   Initial voting power: ${votingPower}`);
+                    console.log(`   Initial raw tokens: ${rawTokens.toString()}`);
                     break;
-                case 'after_stake':
+
+                case 'after_stake': {
                     this.votingPowerAfterStake = votingPower;
-                    console.log(`   📊 Voting power after staking: ${votingPower}`);
+                    this.tokensAfterStake = rawTokens;
+                    const tokenIncrease = rawTokens - this.tokensBefore;
+                    console.log(`   Voting power after staking: ${votingPower}`);
+                    console.log(`   Raw tokens after staking: ${rawTokens.toString()}`);
                     console.log(
-                        `   📈 Change from initial: ${votingPower - this.votingPowerBefore} (+${(((votingPower - this.votingPowerBefore) / this.votingPowerBefore) * 100).toFixed(2)}%)`
+                        `   Token increase: ${ethers.formatEther(tokenIncrease)} (raw: ${tokenIncrease.toString()})`
                     );
+                    console.log(`   Expected increase: ${this.stakingAmount} (raw: ${expectedChangeWei.toString()})`);
+
+                    const stakeSuccessCount = this.testResults.filter(r => r.step === 'staking' && r.success).length;
+                    const expectedTotal = expectedChangeWei * BigInt(stakeSuccessCount);
+                    if (stakeSuccessCount > 0 && expectedTotal > 0n) {
+                        const diff =
+                            tokenIncrease > expectedTotal
+                                ? tokenIncrease - expectedTotal
+                                : expectedTotal - tokenIncrease;
+                        const tolerance = expectedTotal / 100n;
+                        const matched = diff <= tolerance;
+                        console.log(
+                            `   Delegation amount validation: ${matched ? 'PASS' : 'WARN'} (diff: ${ethers.formatEther(diff)})`
+                        );
+                    }
                     break;
-                case 'after_unstake':
+                }
+
+                case 'after_unstake': {
                     this.votingPowerAfterUnstake = votingPower;
-                    console.log(`   📊 Voting power after unstaking: ${votingPower}`);
+                    this.tokensAfterUnstake = rawTokens;
+                    const tokenDecrease = this.tokensAfterStake - rawTokens;
+                    const netChange = rawTokens - this.tokensBefore;
+                    console.log(`   Voting power after unstaking: ${votingPower}`);
+                    console.log(`   Raw tokens after unstaking: ${rawTokens.toString()}`);
                     console.log(
-                        `   📉 Change from after stake: ${votingPower - this.votingPowerAfterStake} (${(((votingPower - this.votingPowerAfterStake) / this.votingPowerAfterStake) * 100).toFixed(2)}%)`
+                        `   Token decrease from peak: ${ethers.formatEther(tokenDecrease)} (raw: ${tokenDecrease.toString()})`
                     );
-                    console.log(
-                        `   🔄 Final change from initial: ${votingPower - this.votingPowerBefore} (${(((votingPower - this.votingPowerBefore) / this.votingPowerBefore) * 100).toFixed(2)}%)`
-                    );
+                    console.log(`   Expected decrease: ${this.stakingAmount} (raw: ${expectedChangeWei.toString()})`);
+                    console.log(`   Net change from initial: ${ethers.formatEther(netChange)}`);
+
+                    const unstakeSuccessCount = this.testResults.filter(
+                        r => r.step === 'unstaking' && r.success
+                    ).length;
+                    const expectedUnstakeTotal = expectedChangeWei * BigInt(unstakeSuccessCount);
+                    if (unstakeSuccessCount > 0 && expectedUnstakeTotal > 0n) {
+                        const diff =
+                            tokenDecrease > expectedUnstakeTotal
+                                ? tokenDecrease - expectedUnstakeTotal
+                                : expectedUnstakeTotal - tokenDecrease;
+                        const tolerance = expectedUnstakeTotal / 100n;
+                        const matched = diff <= tolerance;
+                        console.log(
+                            `   Undelegation amount validation: ${matched ? 'PASS' : 'WARN'} (diff: ${ethers.formatEther(diff)})`
+                        );
+                    }
                     break;
+                }
             }
         } catch (error) {
-            console.error(`   ❌ Failed to check voting power at ${stage}:`, error);
+            console.error(`   Failed to check voting power at ${stage}:`, error);
         }
     }
 
-    /**
-     * @deprecated Use blockchain.waitForBlocks() directly instead
-     * Wait for a specific number of blocks
-     */
-    private async waitForBlocks(blockCount: number): Promise<void> {
-        console.log(`\n⏳ Waiting for ${blockCount} blocks...`);
-        await this.blockchain.waitForBlocks(blockCount, 3000);
+    private getStakingContract(wallet: ethers.Wallet): ethers.Contract {
+        return new ethers.Contract(this.precompileAddress, this.precompileAbi, wallet);
     }
 
-    /**
-     * Simulate staking delegation (replace with actual staking contract calls)
-     */
     private async performStakingDelegation(wallet: any, amount: string): Promise<any> {
-        const validatorAddr = this.validatorAddress ?? this.founderWallet.address;
-
-        // This is a simulation - replace with actual staking contract calls
-        const tx = await wallet.sendTransaction({
-            to: validatorAddr,
-            value: ethers.parseEther(amount),
-            data: '0x', // Placeholder for staking contract call data
-        });
-
-        // Wait for transaction confirmation
-        await this.provider.waitForTransaction(tx.hash);
-        return tx;
+        return this.performPrecompileDelegation(wallet, amount);
     }
 
-    /**
-     * Simulate staking withdrawal (replace with actual staking contract calls)
-     */
     private async performStakingWithdrawal(wallet: any): Promise<any> {
-        // This is a simulation - replace with actual unstaking contract calls
-        const tx = await wallet.sendTransaction({
-            to: wallet.address, // Self-transfer to simulate withdrawal
-            value: ethers.parseEther('0.001'), // Small amount for simulation
-            data: '0x', // Placeholder for unstaking contract call data
+        return this.performPrecompileUndelegation(wallet, this.stakingAmount);
+    }
+
+    private async getValidatorVotingPowerDetailed(): Promise<{ votingPower: number; rawTokens: bigint }> {
+        return this.getValidatorVotingPowerFromRest();
+    }
+
+    // ========================================================================
+    // Precompile mode: real EVM staking precompile calls
+    // ========================================================================
+
+    private async performPrecompileDelegation(wallet: ethers.Wallet, amount: string): Promise<any> {
+        if (!this.validatorAddress) {
+            throw new Error('Validator address (bech32) required for precompile delegation');
+        }
+
+        const contract = this.getStakingContract(wallet);
+        const amountWei = ethers.parseEther(amount);
+
+        console.log(
+            `   Precompile delegate: delegator=${wallet.address}, validator=${this.validatorAddress}, amount=${amountWei.toString()}`
+        );
+
+        // delegate is NOT payable — the precompile debits `amount` from the delegator's
+        // Cosmos bank balance via the staking keeper. Do NOT send msg.value.
+        const tx = await contract.delegate(wallet.address, this.validatorAddress, amountWei, {
+            gasLimit: 500000,
         });
 
-        // Wait for transaction confirmation
-        await this.provider.waitForTransaction(tx.hash);
-        return tx;
+        const receipt = await tx.wait();
+        if (!receipt || receipt.status !== 1) {
+            throw new Error(`Delegation tx reverted (status=${receipt?.status})`);
+        }
+
+        const delegateEvents = receipt.logs.filter(
+            (log: any) => log.address?.toLowerCase() === this.precompileAddress.toLowerCase()
+        );
+        console.log(
+            `   Delegation tx confirmed in block ${receipt.blockNumber}, gas used: ${receipt.gasUsed.toString()}, precompile logs: ${delegateEvents.length}`
+        );
+
+        // Verify delegation via precompile view call
+        const delegation = await this.queryDelegation(wallet.address);
+        if (delegation && delegation.amount > 0n) {
+            console.log(
+                `   Delegation verified: shares=${delegation.shares.toString()}, amount=${ethers.formatEther(delegation.amount)} ${delegation.denom}`
+            );
+        } else {
+            console.warn(`   WARNING: delegation query returned no result — delegate may have failed silently`);
+        }
+
+        return receipt;
+    }
+
+    private async performPrecompileUndelegation(wallet: ethers.Wallet, amount: string): Promise<any> {
+        if (!this.validatorAddress) {
+            throw new Error('Validator address (bech32) required for precompile undelegation');
+        }
+
+        const contract = this.getStakingContract(wallet);
+        const amountWei = ethers.parseEther(amount);
+
+        console.log(
+            `   Precompile undelegate: delegator=${wallet.address}, validator=${this.validatorAddress}, amount=${amountWei.toString()}`
+        );
+
+        const tx = await contract.undelegate(wallet.address, this.validatorAddress, amountWei, {
+            gasLimit: 500000,
+        });
+
+        const receipt = await tx.wait();
+        if (!receipt || receipt.status !== 1) {
+            throw new Error(`Undelegation tx reverted (status=${receipt?.status})`);
+        }
+
+        const undelegateEvents = receipt.logs.filter(
+            (log: any) => log.address?.toLowerCase() === this.precompileAddress.toLowerCase()
+        );
+        console.log(
+            `   Undelegation tx confirmed in block ${receipt.blockNumber}, gas used: ${receipt.gasUsed.toString()}, precompile logs: ${undelegateEvents.length}`
+        );
+        return receipt;
     }
 
     /**
-     * Simulate getting validator voting power (replace with actual queries)
+     * Query validator tokens (voting power) from Cosmos REST API.
+     * Returns both the human-readable integer and the raw token bigint for precise comparison.
      */
-    private async getValidatorVotingPower(validatorAddress: string): Promise<number> {
+    private async getValidatorVotingPowerFromRest(): Promise<{ votingPower: number; rawTokens: bigint }> {
         try {
-            // This is a simulation - replace with actual validator query
-            const balance = await this.blockchain.getWalletBalance(validatorAddress);
+            const client = this.consensusClient as CosmosConsensusClient;
+            const response = await client.getStakingValidator(this.validatorAddress!);
+            const validator = response.validator;
 
-            // Since getWalletBalance returns formatted ETH string, just parse it directly
-            const balanceEth = typeof balance === 'string' ? parseFloat(balance) : Number(balance);
+            if (!validator?.tokens) {
+                console.log(`   Validator tokens not found, returning 0`);
+                return { votingPower: 0, rawTokens: 0n };
+            }
 
-            // Simulate voting power as a function of validator balance
-            // In real implementation, this would query the staking module
-            const votingPower = Math.floor(balanceEth * 1000); // 1 ETH = 1000 voting power units
+            const rawTokens = BigInt(validator.tokens);
+            const votingPower = Number(rawTokens / BigInt(10 ** 18));
 
-            console.log(`   🔍 Debug - Balance: ${balanceEth.toFixed(6)} ETH, Voting Power: ${votingPower}`);
-            return votingPower;
+            console.log(
+                `   REST query - Validator: ${validator.description?.moniker ?? 'Unknown'}, tokens: ${validator.tokens}, voting power: ${votingPower}`
+            );
+            return { votingPower, rawTokens };
         } catch (error) {
-            console.error(`   ❌ Error calculating voting power:`, error);
-            // Return a default value to prevent test failure
-            return 0;
+            console.error(`   Failed to query validator voting power from REST:`, error);
+            return { votingPower: 0, rawTokens: 0n };
         }
     }
+
+    /**
+     * Query delegation info for a delegator via precompile view function
+     */
+    async queryDelegation(
+        delegatorAddress: string,
+        validatorAddr?: string
+    ): Promise<{ shares: bigint; denom: string; amount: bigint } | null> {
+        const valAddr = validatorAddr ?? this.validatorAddress;
+        if (!valAddr) {
+            throw new Error('Validator address required for delegation query');
+        }
+
+        try {
+            const contract = new ethers.Contract(this.precompileAddress, this.precompileAbi, this.provider);
+            const result = await contract.delegation(delegatorAddress, valAddr);
+            return {
+                shares: result.shares,
+                denom: result.balance.denom,
+                amount: result.balance.amount,
+            };
+        } catch {
+            console.log(`   No delegation found for ${delegatorAddress} -> ${valAddr}`);
+            return null;
+        }
+    }
+
+    // ========================================================================
+    // Results analysis and cleanup
+    // ========================================================================
 
     /**
      * Analyze and report test results
@@ -374,23 +538,27 @@ export class StakingTestBuilder {
         const successfulStaking = stakingResults.filter(r => r.success);
         const successfulUnstaking = unstakingResults.filter(r => r.success);
 
-        console.log(`\n📊 Complete Staking Workflow Results Summary:`);
+        console.log(`\n   Complete Staking Workflow Results Summary:`);
         console.log(`   Test: ${this.testName}`);
         console.log(`   Total duration: ${duration}ms (${(duration / 1000 / 60).toFixed(2)} minutes)`);
-        console.log(`\n🔢 Staking Operations:`);
+        console.log(`\n   Staking Operations:`);
         console.log(`   Successful staking: ${successfulStaking.length}/${stakingResults.length}`);
-        console.log(
-            `   Staking success rate: ${((successfulStaking.length / stakingResults.length) * 100).toFixed(2)}%`
-        );
-        console.log(`   Total amount staked: ${successfulStaking.length * Number(this.stakingAmount)} ETH`);
+        if (stakingResults.length > 0) {
+            console.log(
+                `   Staking success rate: ${((successfulStaking.length / stakingResults.length) * 100).toFixed(2)}%`
+            );
+        }
+        console.log(`   Total amount staked: ${successfulStaking.length * Number(this.stakingAmount)}`);
 
-        console.log(`\n🔢 Unstaking Operations:`);
+        console.log(`\n   Unstaking Operations:`);
         console.log(`   Successful unstaking: ${successfulUnstaking.length}/${unstakingResults.length}`);
-        console.log(
-            `   Unstaking success rate: ${((successfulUnstaking.length / unstakingResults.length) * 100).toFixed(2)}%`
-        );
+        if (unstakingResults.length > 0) {
+            console.log(
+                `   Unstaking success rate: ${((successfulUnstaking.length / unstakingResults.length) * 100).toFixed(2)}%`
+            );
+        }
 
-        console.log(`\n📊 Voting Power Analysis:`);
+        console.log(`\n   Voting Power Analysis:`);
         console.log(`   Initial voting power: ${this.votingPowerBefore}`);
         console.log(
             `   After staking: ${this.votingPowerAfterStake} (+${this.votingPowerAfterStake - this.votingPowerBefore})`
@@ -400,26 +568,30 @@ export class StakingTestBuilder {
         );
         console.log(`   Net change: ${this.votingPowerAfterUnstake - this.votingPowerBefore}`);
 
-        // Validate voting power changes (flexible for different blockchain configurations)
-        const expectedIncrease = successfulStaking.length * Number(this.stakingAmount) * 1000; // Expected voting power increase
-        const actualIncrease = this.votingPowerAfterStake - this.votingPowerBefore;
-        const unstakeChange = this.votingPowerAfterUnstake - this.votingPowerAfterStake;
+        const tokenIncrease = this.tokensAfterStake - this.tokensBefore;
+        const tokenDecrease = this.tokensAfterStake - this.tokensAfterUnstake;
+        const expectedWei = ethers.parseEther(this.stakingAmount) * BigInt(successfulStaking.length);
+        const expectedUnstakeWei = ethers.parseEther(this.stakingAmount) * BigInt(successfulUnstaking.length);
 
-        console.log(`\n✅ Voting Power Validation:`);
-        console.log(`   Expected increase from staking: ~${expectedIncrease}`);
-        console.log(`   Actual increase: ${actualIncrease}`);
-
-        // Flexible validation - allow for different blockchain behaviors
-        const stakingValid = actualIncrease > 0; // Just check that staking increased voting power
-        const unstakeNote =
-            unstakeChange === 0
-                ? '(No change - this may be normal depending on blockchain configuration)'
-                : `(Decreased by ${Math.abs(unstakeChange)} - this may vary by blockchain)`;
-
+        console.log(`\n   Precise Token Validation:`);
+        console.log(`   Tokens before: ${ethers.formatEther(this.tokensBefore)}`);
+        console.log(`   Tokens after stake: ${ethers.formatEther(this.tokensAfterStake)}`);
+        console.log(`   Tokens after unstake: ${ethers.formatEther(this.tokensAfterUnstake)}`);
         console.log(
-            `   Staking validation: ${stakingValid ? '✅ PASS' : '❌ FAIL'} - Voting power increased after staking`
+            `   Increase from staking: ${ethers.formatEther(tokenIncrease)} (expected: ${ethers.formatEther(expectedWei)})`
         );
-        console.log(`   Unstaking validation: ✅ FLEXIBLE ${unstakeNote}`);
+        console.log(
+            `   Decrease from unstaking: ${ethers.formatEther(tokenDecrease)} (expected: ${ethers.formatEther(expectedUnstakeWei)})`
+        );
+
+        const stakingValid = tokenIncrease > 0n;
+        const unstakingValid = tokenDecrease > 0n;
+        console.log(
+            `   Staking: ${stakingValid ? 'PASS' : 'FAIL'} - tokens increased by ${ethers.formatEther(tokenIncrease)}`
+        );
+        console.log(
+            `   Unstaking: ${unstakingValid ? 'PASS' : 'FAIL'} - tokens decreased by ${ethers.formatEther(tokenDecrease)}`
+        );
 
         return this;
     }
@@ -428,18 +600,16 @@ export class StakingTestBuilder {
      * Clean up resources
      */
     async cleanup(): Promise<StakingTestBuilder> {
-        console.log(`\n🧹 Cleaning up staking workflow resources...`);
+        console.log(`\n   Cleaning up staking workflow resources...`);
 
-        // Wait a bit to ensure all async operations are complete
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // Clean up provider connections
         if (this.provider) {
             try {
                 this.provider.destroy();
-                console.log(`   ✅ Provider cleanup completed`);
+                console.log(`   Provider cleanup completed`);
             } catch {
-                console.log(`   ⚠️ Provider cleanup completed with warnings`);
+                console.log(`   Provider cleanup completed with warnings`);
             }
         }
 
@@ -458,5 +628,55 @@ export class StakingTestBuilder {
      */
     getWallets(): any[] {
         return this.wallets;
+    }
+
+    /**
+     * Get the discovered/configured validator address
+     */
+    getValidatorAddress(): string | undefined {
+        return this.validatorAddress;
+    }
+
+    /**
+     * Get voting power recorded before staking
+     */
+    getVotingPowerBefore(): number {
+        return this.votingPowerBefore;
+    }
+
+    /**
+     * Get voting power recorded after staking
+     */
+    getVotingPowerAfterStake(): number {
+        return this.votingPowerAfterStake;
+    }
+
+    /**
+     * Get voting power recorded after unstaking
+     */
+    getVotingPowerAfterUnstake(): number {
+        return this.votingPowerAfterUnstake;
+    }
+
+    /**
+     * Get the consensus layer client (for direct REST queries in tests)
+     */
+    getConsensusClient(): IConsensusLayerClient | null {
+        return this.consensusClient;
+    }
+
+    /**
+     * Get raw tokens recorded at each stage (precise bigint values, no precision loss)
+     */
+    getTokensBefore(): bigint {
+        return this.tokensBefore;
+    }
+
+    getTokensAfterStake(): bigint {
+        return this.tokensAfterStake;
+    }
+
+    getTokensAfterUnstake(): bigint {
+        return this.tokensAfterUnstake;
     }
 }

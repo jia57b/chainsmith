@@ -196,8 +196,19 @@ docker run --rm --user root \
       \"symbol\": \"KII\"
     }]" $GENESIS > $GENESIS.tmp && \
     mv $GENESIS.tmp $GENESIS
+
+    # Activate EVM precompiles (staking, distribution, bech32, bank, ICS20, governance)
+    jq ".app_state.evm.params.active_static_precompiles = [
+      \"0x0000000000000000000000000000000000000400\",
+      \"0x0000000000000000000000000000000000000800\",
+      \"0x0000000000000000000000000000000000000801\",
+      \"0x0000000000000000000000000000000000000802\",
+      \"0x0000000000000000000000000000000000000804\",
+      \"0x0000000000000000000000000000000000000805\"
+    ]" $GENESIS > $GENESIS.tmp && \
+    mv $GENESIS.tmp $GENESIS
   ' 2>/dev/null
-echo "   ✅ Genesis patched (denom: akii, EVM denom: akii, bank metadata registered)"
+echo "   ✅ Genesis patched (denom: akii, EVM denom: akii, bank metadata, precompiles activated)"
 echo ""
 
 # ----------------------------------------------------------

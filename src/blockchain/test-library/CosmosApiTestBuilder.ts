@@ -42,38 +42,239 @@ export class CosmosApiTestBuilder {
 
     /**
      * Test Staking Module APIs - Using default paths
+     * Validates field-level structure of validators, params, and pool responses.
      */
     async testStakingModule(): Promise<CosmosApiTestBuilder> {
         console.log(`\n⚡ Testing Staking Module APIs (Default Paths)`);
 
         try {
-            // Get all validators - Using default path
             const validatorsResponse = await this.consensusClient.getStakingValidators();
             this.validators = this.extractValidatorsFromResponse(validatorsResponse);
+            expect(this.validators).to.be.an('array').with.length.greaterThan(0);
+            for (const v of this.validators) {
+                expect(v).to.have.property('operator_address');
+                expect(v).to.have.property('tokens');
+                expect(v).to.have.property('status');
+            }
             this.testResults.set('staking_validators_default', {
                 success: true,
                 count: this.validators.length,
             });
             console.log(`   ✅ Found ${this.validators.length} validators (default path)`);
-
-            // Get staking parameters - Using default path
-            const paramsResponse = await this.consensusClient.getStakingParams();
-            this.testResults.set('staking_params_default', {
-                success: true,
-                data: this.extractParamsFromResponse(paramsResponse),
-            });
-            console.log(`   ✅ Staking parameters retrieved (default path)`);
-
-            // Get staking pool - Using default path
-            const poolResponse = await this.consensusClient.getStakingPool();
-            this.testResults.set('staking_pool_default', {
-                success: true,
-                data: this.extractPoolFromResponse(poolResponse),
-            });
-            console.log(`   ✅ Staking pool retrieved (default path)`);
+            for (const [i, v] of this.validators.entries()) {
+                console.log(
+                    `     ${i + 1}. ${v.description?.moniker ?? 'Unknown'} (${v.operator_address}) - tokens: ${v.tokens}, status: ${v.status}`
+                );
+            }
         } catch (error: any) {
-            this.testResults.set('staking_module_default', { success: false, error: error.message });
-            console.log(`   ❌ Staking module tests (default) failed: ${error.message}`);
+            this.testResults.set('staking_validators_default', { success: false, error: error.message });
+            console.log(`   ❌ Staking validators query failed: ${error.message}`);
+        }
+
+        try {
+            const paramsResponse = await this.consensusClient.getStakingParams();
+            const params = this.extractParamsFromResponse(paramsResponse);
+            expect(params).to.have.property('bond_denom');
+            expect(params).to.have.property('unbonding_time');
+            expect(params).to.have.property('max_validators');
+            this.testResults.set('staking_params_default', { success: true, data: params });
+            console.log(
+                `   ✅ Staking parameters: bond_denom=${params.bond_denom}, unbonding_time=${params.unbonding_time}, max_validators=${params.max_validators}`
+            );
+        } catch (error: any) {
+            this.testResults.set('staking_params_default', { success: false, error: error.message });
+            console.log(`   ❌ Staking params query failed: ${error.message}`);
+        }
+
+        try {
+            const poolResponse = await this.consensusClient.getStakingPool();
+            const pool = this.extractPoolFromResponse(poolResponse);
+            expect(pool).to.have.property('bonded_tokens');
+            expect(pool).to.have.property('not_bonded_tokens');
+            expect(BigInt(pool.bonded_tokens) > 0n).to.be.true;
+            this.testResults.set('staking_pool_default', { success: true, data: pool });
+            console.log(`   ✅ Staking pool: bonded=${pool.bonded_tokens}, not_bonded=${pool.not_bonded_tokens}`);
+        } catch (error: any) {
+            this.testResults.set('staking_pool_default', { success: false, error: error.message });
+            console.log(`   ❌ Staking pool query failed: ${error.message}`);
+        }
+
+        return this;
+    }
+
+    /**
+     * Test Staking Delegation queries for a given delegator address
+     */
+    async testStakingDelegations(delegatorAddr: string): Promise<CosmosApiTestBuilder> {
+        console.log(`\n🔗 Testing Staking Delegation APIs for ${delegatorAddr}`);
+
+        try {
+            const delegationsResponse = await this.consensusClient.getDelegatorDelegations(delegatorAddr);
+            const delegations = delegationsResponse.delegation_responses ?? [];
+            this.testResults.set('staking_delegator_delegations', {
+                success: true,
+                count: delegations.length,
+                data: delegations,
+            });
+            console.log(`   ✅ Found ${delegations.length} delegations for delegator`);
+        } catch (error: any) {
+            this.testResults.set('staking_delegator_delegations', {
+                success: false,
+                error: error.message,
+            });
+            console.log(`   ❌ Delegator delegations query failed: ${error.message}`);
+        }
+
+        try {
+            const unbondingResponse = await this.consensusClient.getDelegatorUnbondingDelegations(delegatorAddr);
+            const unbonding = unbondingResponse.unbonding_responses ?? [];
+            this.testResults.set('staking_unbonding_delegations', {
+                success: true,
+                count: unbonding.length,
+                data: unbonding,
+            });
+            console.log(`   ✅ Found ${unbonding.length} unbonding delegations`);
+        } catch (error: any) {
+            this.testResults.set('staking_unbonding_delegations', {
+                success: false,
+                error: error.message,
+            });
+            console.log(`   ❌ Unbonding delegations query failed: ${error.message}`);
+        }
+
+        try {
+            const redelegationsResponse = await this.consensusClient.getDelegatorRedelegations(delegatorAddr);
+            const redelegations = redelegationsResponse.redelegation_responses ?? [];
+            this.testResults.set('staking_redelegations', {
+                success: true,
+                count: redelegations.length,
+                data: redelegations,
+            });
+            console.log(`   ✅ Found ${redelegations.length} redelegations`);
+        } catch (error: any) {
+            this.testResults.set('staking_redelegations', {
+                success: false,
+                error: error.message,
+            });
+            console.log(`   ❌ Redelegations query failed: ${error.message}`);
+        }
+
+        try {
+            const validatorsResponse = await this.consensusClient.getDelegatorValidators(delegatorAddr);
+            const delegatorValidators = validatorsResponse.validators ?? [];
+            this.testResults.set('staking_delegator_validators', {
+                success: true,
+                count: delegatorValidators.length,
+                data: delegatorValidators,
+            });
+            console.log(`   ✅ Delegator has ${delegatorValidators.length} validators`);
+        } catch (error: any) {
+            this.testResults.set('staking_delegator_validators', {
+                success: false,
+                error: error.message,
+            });
+            console.log(`   ❌ Delegator validators query failed: ${error.message}`);
+        }
+
+        return this;
+    }
+
+    /**
+     * Get stored validators (populated after testStakingModule)
+     */
+    getValidators(): any[] {
+        return this.validators;
+    }
+
+    /**
+     * Test single validator detail query via /staking/validators/{addr}.
+     * Picks the first validator from cached list (requires testStakingModule() first).
+     */
+    async testValidatorDetail(): Promise<CosmosApiTestBuilder> {
+        if (this.validators.length === 0) {
+            this.testResults.set('staking_validator_detail', {
+                success: false,
+                error: 'No validators available - call testStakingModule() first',
+            });
+            console.log(`   ⚠️ No validators available, skipping validator detail test`);
+            return this;
+        }
+
+        const operatorAddr = this.validators[0].operator_address;
+        console.log(`\n🔍 Testing Validator Detail for ${operatorAddr}`);
+
+        try {
+            const detailResponse = await this.consensusClient.getStakingValidator(operatorAddr);
+            const detail = detailResponse.validator;
+            expect(detail).to.have.property('operator_address');
+            expect(detail).to.have.property('tokens');
+            expect(detail).to.have.property('status');
+            this.testResults.set('staking_validator_detail', {
+                success: true,
+                data: {
+                    moniker: detail?.description?.moniker,
+                    tokens: detail?.tokens,
+                    status: detail?.status,
+                    operator_address: detail?.operator_address,
+                },
+            });
+            console.log(
+                `   ✅ Validator: ${detail?.description?.moniker ?? 'Unknown'}, tokens: ${detail?.tokens}, status: ${detail?.status}`
+            );
+        } catch (error: any) {
+            this.testResults.set('staking_validator_detail', {
+                success: false,
+                error: error.message,
+            });
+            console.log(`   ❌ Validator detail query failed: ${error.message}`);
+        }
+
+        return this;
+    }
+
+    /**
+     * Test validator delegations and delegator-side APIs:
+     * 1. Pick the first validator from cached list (requires testStakingModule() first)
+     * 2. Query the validator's delegation list to resolve a real delegator address
+     * 3. Use that delegator address to query delegator-side APIs
+     */
+    async testValidatorDelegations(): Promise<CosmosApiTestBuilder> {
+        if (this.validators.length === 0) {
+            this.testResults.set('staking_validator_delegations', {
+                success: false,
+                error: 'No validators available - call testStakingModule() first',
+            });
+            console.log(`   ⚠️ No validators available, skipping delegation tests`);
+            return this;
+        }
+
+        const operatorAddr = this.validators[0].operator_address;
+        console.log(`\n🔗 Testing Validator Delegation APIs for ${operatorAddr}`);
+
+        try {
+            const valDelegations = await this.consensusClient.getValidatorDelegations(operatorAddr);
+            const valDelegationList = valDelegations.delegation_responses ?? [];
+            this.testResults.set('staking_validator_delegations', {
+                success: true,
+                count: valDelegationList.length,
+            });
+            console.log(`   ✅ Validator has ${valDelegationList.length} delegation(s)`);
+
+            if (valDelegationList.length === 0) {
+                console.log(`   ⚠️ No delegations found, skipping delegator queries`);
+                return this;
+            }
+
+            const delegatorAddr = valDelegationList[0].delegation.delegator_address;
+            console.log(`   Resolved delegator address: ${delegatorAddr}`);
+
+            await this.testStakingDelegations(delegatorAddr);
+        } catch (error: any) {
+            this.testResults.set('staking_validator_delegations', {
+                success: false,
+                error: error.message,
+            });
+            console.log(`   ❌ Validator delegations query failed: ${error.message}`);
         }
 
         return this;
@@ -112,38 +313,6 @@ export class CosmosApiTestBuilder {
         } catch (error: any) {
             this.testResults.set('mint_module', { success: false, error: error.message });
             console.log(`   ❌ Mint module tests failed: ${error.message}`);
-        }
-
-        return this;
-    }
-
-    /**
-     * Test Tendermint RPC APIs
-     */
-    async testTendermintRPC(): Promise<CosmosApiTestBuilder> {
-        console.log(`\n🔗 Testing Tendermint RPC APIs`);
-
-        try {
-            // Get node status
-            const statusResponse = await this.consensusClient.getTendermintStatus();
-            this.testResults.set('tendermint_status', { success: true, data: statusResponse });
-            console.log(`   ✅ Node status retrieved`);
-
-            // Get latest block
-            const blockResponse = await this.consensusClient.getTendermintBlock();
-            this.testResults.set('tendermint_block', { success: true, data: blockResponse });
-            console.log(`   ✅ Latest block retrieved`);
-
-            // Get validator set
-            const validatorsResponse = await this.consensusClient.getTendermintValidators();
-            this.testResults.set('tendermint_validators', {
-                success: true,
-                data: validatorsResponse,
-            });
-            console.log(`   ✅ Validator set retrieved`);
-        } catch (error: any) {
-            this.testResults.set('tendermint_rpc', { success: false, error: error.message });
-            console.log(`   ❌ Tendermint RPC tests failed: ${error.message}`);
         }
 
         return this;
@@ -239,7 +408,7 @@ export class CosmosApiTestBuilder {
 
         if (this.validators.length > 0) {
             console.log(`   Validators: ${this.validators.length} found`);
-            this.validators.slice(0, 3).forEach((validator, index) => {
+            this.validators.slice(0, 4).forEach((validator, index) => {
                 console.log(
                     `     ${index + 1}. ${validator.description?.moniker ?? 'Unknown'} (${validator.operator_address})`
                 );

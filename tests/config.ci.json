@@ -1,5 +1,10 @@
 {
     "testConfig": {
+        "staking": {
+            "defaultStakeAmount": "2",
+            "fundingMultiplier": 2,
+            "precompileAddress": "0x0000000000000000000000000000000000000800"
+        },
         "performanceExpect": {
             "tokenTransfer": {
                 "threshold": 10000,
@@ -174,8 +179,8 @@
         "executeLayerHttpRpcUrl": "http://localhost:8545",
         "consensusLayerRpcUrl": "http://localhost:26657",
         "consensusLayerHttpRestApiUrl": "http://localhost:1317",
-        "consensusRestApiPathPrefix": "",
-        "consensusRestApiVersion": "",
+        "consensusRestApiPathPrefix": "/cosmos",
+        "consensusRestApiVersion": "v1beta1",
         "executionMethod": "docker",
         "docker": {
             "containerPatterns": {
@@ -316,8 +321,8 @@
         "executeLayerHttpRpcUrl": "http://localhost:8545",
         "consensusLayerRpcUrl": "http://localhost:26657",
         "consensusLayerHttpRestApiUrl": "http://localhost:1317",
-        "consensusRestApiPathPrefix": "",
-        "consensusRestApiVersion": "",
+        "consensusRestApiPathPrefix": "/cosmos",
+        "consensusRestApiVersion": "v1beta1",
         "executionMethod": "docker",
         "docker": {
             "containerPatterns": {

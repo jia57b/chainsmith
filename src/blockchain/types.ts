@@ -282,6 +282,12 @@ export interface IConsensusLayerClient {
     getStakingValidators(customPath?: string): Promise<any>;
     getStakingParams(customPath?: string): Promise<any>;
     getStakingPool(customPath?: string): Promise<any>;
+    getStakingValidator(validatorAddr: string, customPath?: string): Promise<any>;
+    getValidatorDelegations(validatorAddr: string, customPath?: string): Promise<any>;
+    getDelegatorDelegations(delegatorAddr: string, customPath?: string): Promise<any>;
+    getDelegatorUnbondingDelegations(delegatorAddr: string, customPath?: string): Promise<any>;
+    getDelegatorRedelegations(delegatorAddr: string, customPath?: string): Promise<any>;
+    getDelegatorValidators(delegatorAddr: string, customPath?: string): Promise<any>;
 
     // Slashing Module APIs - supports custom path
     getSlashingParams(customPath?: string): Promise<any>;
@@ -292,12 +298,6 @@ export interface IConsensusLayerClient {
 
     // Node and Chain Information - supports custom path
     getNodeInfo(customPath?: string): Promise<any>;
-    getChainStatus(): Promise<any>;
-
-    // Tendermint RPC methods - supports custom parameters
-    getTendermintStatus(): Promise<any>;
-    getTendermintBlock(height?: string): Promise<any>;
-    getTendermintValidators(height?: string): Promise<any>;
 }
 
 /**

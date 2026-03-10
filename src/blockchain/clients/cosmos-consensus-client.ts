@@ -18,6 +18,12 @@ export const COSMOS_API_PATHS = {
     STAKING_VALIDATORS: '/staking/validators',
     STAKING_PARAMS: '/staking/params',
     STAKING_POOL: '/staking/pool',
+    STAKING_DELEGATIONS: '/staking/delegations', // + /{delegator_addr}
+    STAKING_VALIDATOR: '/staking/validators', // + /{validator_addr}
+    STAKING_VALIDATOR_DELEGATIONS: '/staking/validators', // + /{validator_addr}/delegations
+    STAKING_UNBONDING_DELEGATIONS: '/staking/delegators', // + /{delegator_addr}/unbonding_delegations
+    STAKING_REDELEGATIONS: '/staking/delegators', // + /{delegator_addr}/redelegations
+    STAKING_DELEGATOR_VALIDATORS: '/staking/delegators', // + /{delegator_addr}/validators
 
     // Slashing Module
     SLASHING_SIGNING_INFOS: '/slashing/signing_infos',
@@ -244,6 +250,41 @@ export class CosmosConsensusClient implements IConsensusLayerClient {
         return await this.makeRestRequest(path);
     }
 
+    async getStakingValidator(validatorAddr: string, customPath?: string): Promise<any> {
+        const path = customPath ?? `${this.buildRestPath(COSMOS_API_PATHS.STAKING_VALIDATOR)}/${validatorAddr}`;
+        return await this.makeRestRequest(path);
+    }
+
+    async getValidatorDelegations(validatorAddr: string, customPath?: string): Promise<any> {
+        const path =
+            customPath ??
+            `${this.buildRestPath(COSMOS_API_PATHS.STAKING_VALIDATOR_DELEGATIONS)}/${validatorAddr}/delegations`;
+        return await this.makeRestRequest(path);
+    }
+
+    async getDelegatorDelegations(delegatorAddr: string, customPath?: string): Promise<any> {
+        const path = customPath ?? `${this.buildRestPath(COSMOS_API_PATHS.STAKING_DELEGATIONS)}/${delegatorAddr}`;
+        return await this.makeRestRequest(path);
+    }
+
+    async getDelegatorUnbondingDelegations(delegatorAddr: string, customPath?: string): Promise<any> {
+        const basePath = this.buildRestPath(COSMOS_API_PATHS.STAKING_UNBONDING_DELEGATIONS);
+        const path = customPath ?? `${basePath}/${delegatorAddr}/unbonding_delegations`;
+        return await this.makeRestRequest(path);
+    }
+
+    async getDelegatorRedelegations(delegatorAddr: string, customPath?: string): Promise<any> {
+        const basePath = this.buildRestPath(COSMOS_API_PATHS.STAKING_REDELEGATIONS);
+        const path = customPath ?? `${basePath}/${delegatorAddr}/redelegations`;
+        return await this.makeRestRequest(path);
+    }
+
+    async getDelegatorValidators(delegatorAddr: string, customPath?: string): Promise<any> {
+        const basePath = this.buildRestPath(COSMOS_API_PATHS.STAKING_DELEGATOR_VALIDATORS);
+        const path = customPath ?? `${basePath}/${delegatorAddr}/validators`;
+        return await this.makeRestRequest(path);
+    }
+
     // Slashing Module APIs - support custom paths
     async getSlashingParams(customPath?: string): Promise<any> {
         const path = customPath ?? this.buildRestPath(COSMOS_API_PATHS.SLASHING_PARAMS);
@@ -265,42 +306,5 @@ export class CosmosConsensusClient implements IConsensusLayerClient {
     async getNodeInfo(customPath?: string): Promise<any> {
         const path = customPath ?? this.buildRestPath(COSMOS_API_PATHS.NODE_INFO);
         return await this.makeRestRequest(path);
-    }
-
-    async getChainStatus(): Promise<any> {
-        return await this.makeRpcRequestPrivate(COSMOS_API_PATHS.TENDERMINT_STATUS);
-    }
-
-    // Tendermint RPC methods - support custom parameters
-    async getTendermintStatus(): Promise<any> {
-        const response = await axios.post(this.rpcEndpoint, {
-            jsonrpc: '2.0',
-            method: 'status',
-            params: {},
-            id: 1,
-        });
-        return response.data;
-    }
-
-    async getTendermintBlock(height?: string): Promise<any> {
-        const params = height ? { height } : { height: '0' };
-        const response = await axios.post(this.rpcEndpoint, {
-            jsonrpc: '2.0',
-            method: 'block',
-            params,
-            id: 2,
-        });
-        return response.data;
-    }
-
-    async getTendermintValidators(height?: string): Promise<any> {
-        const params = height ? { height } : { height: '0' };
-        const response = await axios.post(this.rpcEndpoint, {
-            jsonrpc: '2.0',
-            method: 'validators',
-            params,
-            id: 3,
-        });
-        return response.data;
     }
 }

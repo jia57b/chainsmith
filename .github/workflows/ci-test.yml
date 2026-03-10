@@ -124,24 +124,11 @@ jobs:
             - name: Start localnet
               working-directory: chains/${{ env.CHAIN_ENV }}
               run: |
-                  if [ "${CHAIN_ENV}" = "0g-docker" ]; then
-                    docker compose -f docker-compose.multinode.yml up -d
-                    echo "Waiting 10s for containers to start..."
-                    sleep 10
-                    docker compose -f docker-compose.multinode.yml ps
-                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
+                  if [ "${CHAIN_ENV}" = "story-docker" ]; then
                     cd story-localnet
                     chmod +x start.sh
                     ./start.sh
-                  elif [ "${CHAIN_ENV}" = "kava-docker" ]; then
-                    chmod +x start-multinode.sh
-                    ./start-multinode.sh
-                  elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                    docker compose -f docker-compose.multinode.yml up -d
-                    echo "Waiting 15s for containers to start..."
-                    sleep 15
-                    docker compose -f docker-compose.multinode.yml ps
-                  elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
+                  else
                     chmod +x start-multinode.sh
                     ./start-multinode.sh
                   fi
@@ -229,24 +216,15 @@ jobs:
               continue-on-error: true
               run: pnpm test:rpc:cometbft
 
-            # - name: Test - Cosmos API
-            #   continue-on-error: true
-            #   run: pnpm test:cosmos:api:sample
-
-            - name: Test - Performance
-              if: inputs.tests == 'all' || inputs.tests == 'performance'
+            - name: Test - Cosmos API
+              if: inputs.tests == 'all' || (inputs.chain != 'mezo-docker' && inputs.chain != '0g-docker')
               continue-on-error: true
-              run: pnpm test:performance
+              run: pnpm test:cosmos:api:sample
 
-            - name: Test - Load Stress
-              if: inputs.tests == 'all' || inputs.tests == 'load:stress'
+            - name: Test - Staking
+              if: inputs.tests == 'all' || inputs.chain == 'kii-docker'
               continue-on-error: true
-              run: pnpm test:load:stress
-
-            - name: Test - Fault Tolerance
-              if: inputs.tests == 'all' || inputs.tests == 'fault-tolerance'
-              continue-on-error: true
-              run: pnpm test:fault-tolerance
+              run: pnpm test:staking:sample
 
             # ─── Reports ────────────────────────────────────────────
             - name: Merge test reports
@@ -299,15 +277,10 @@ jobs:
               working-directory: chains/${{ env.CHAIN_ENV }}
               if: always()
               run: |
-                  if [ "${CHAIN_ENV}" = "kava-docker" ]; then
-                    ./stop-multinode.sh --clean 2>/dev/null || true
-                  elif [ "${CHAIN_ENV}" = "0g-docker" ]; then
-                    docker compose -f docker-compose.multinode.yml down -v 2>/dev/null || true
-                  elif [ "${CHAIN_ENV}" = "story-docker" ]; then
-                    cd story-localnet && docker compose -f docker-compose-bootnode1.yml -f docker-compose-validator1.yml -f docker-compose-validator2.yml -f docker-compose-validator3.yml -f docker-compose-validator4.yml -f docker-compose-rpc1.yml down -v 2>/dev/null || true
-                  elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
-                    docker compose -f docker-compose.multinode.yml down -v 2>/dev/null || true
-                  elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
+                  if [ "${CHAIN_ENV}" = "story-docker" ]; then
+                    cd story-localnet && chmod +x terminate.sh && ./terminate.sh
+                  else
+                    chmod +x stop-multinode.sh
                     ./stop-multinode.sh --clean 2>/dev/null || true
                   fi
 

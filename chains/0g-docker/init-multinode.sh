@@ -45,7 +45,7 @@ for i in $(seq 1 $NUM_VALIDATORS); do
   docker volume rm -f validator${i}_node_data 2>/dev/null || true
   docker volume rm -f validator${i}_geth_data 2>/dev/null || true
 done
-echo "   ✅ Clea  ned"
+echo "   ✅ Cleaned"
 echo ""
 
 # ----------------------------------------------------------
@@ -316,8 +316,7 @@ echo "📋 Persistent Peers:"
 echo "   PERSISTENT_PEERS=${PEERS}"
 echo ""
 echo "📋 Next steps:"
-echo "  1. Start multi-node network: docker compose -f docker-compose.multinode.yml up -d"
-echo "  2. Check status: docker compose -f docker-compose.multinode.yml ps"
-echo "  3. Verify block production: curl -s localhost:26657/status | jq .result.sync_info.latest_block_height"
-echo "  4. Verify validator count: curl -s localhost:26657/validators | jq '.result.validators | length'"
+echo "  1. Start network: ./start-multinode.sh"
+echo "  2. Check status:  docker compose -f docker-compose.multinode.yml ps"
+echo "  3. Stop network:  ./stop-multinode.sh"
 echo ""
