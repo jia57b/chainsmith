@@ -187,7 +187,7 @@ echo ""
 # ----------------------------------------------------------
 echo "🔧 Step 7/8: Initializing Geth and configuring P2P interconnections..."
 
-# Geth P2P port mapping (consistent with docker-compose.multinode.yml)
+# Geth P2P port mapping (consistent with docker-compose.yml)
 GETH_PORTS=(0 30303 30304 30305 30306)
 
 # Initialize Geth (using patched eth-genesis.json instead of image's built-in genesis.json)
@@ -317,6 +317,6 @@ echo "   PERSISTENT_PEERS=${PEERS}"
 echo ""
 echo "📋 Next steps:"
 echo "  1. Start network: ./start-multinode.sh"
-echo "  2. Check status:  docker compose -f docker-compose.multinode.yml ps"
+echo "  2. Check status:  docker compose -f docker-compose.yml ps"
 echo "  3. Stop network:  ./stop-multinode.sh"
 echo ""

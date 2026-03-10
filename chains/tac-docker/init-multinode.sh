@@ -18,12 +18,19 @@ cd contrib/localnet
 # Provide y to overwrite existing testnet
 echo y | HOMEDIR=/code/.testnet ./init-multi-node.sh
 
-# Add our standard test wallet with plenty of funds
-# Address: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 (Hardhat Account #0)
-tacchaind genesis add-genesis-account 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266 10000000000000000000000000utac --home /code/.testnet/node0
-cp /code/.testnet/node0/config/genesis.json /code/.testnet/node1/config/genesis.json
-cp /code/.testnet/node0/config/genesis.json /code/.testnet/node2/config/genesis.json
-cp /code/.testnet/node0/config/genesis.json /code/.testnet/node3/config/genesis.json
+# Inject ChainSmith test wallet (Hardhat Account #0) into genesis
+# EVM: 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
+# TAC (bech32): tac17w0adeg64ky0daxwd2ugyuneellmjgnxxhfnn2
+FOUNDER_TAC_ADDR=\"tac17w0adeg64ky0daxwd2ugyuneellmjgnxxhfnn2\"
+FOUNDER_BALANCE=\"10000000000000000000000000utac\"
+
+tacchaind genesis add-genesis-account \$FOUNDER_TAC_ADDR \$FOUNDER_BALANCE --home /code/.testnet/node0
+
+# Distribute genesis to all nodes
+GENESIS=/code/.testnet/node0/config/genesis.json
+cp \$GENESIS /code/.testnet/node1/config/genesis.json
+cp \$GENESIS /code/.testnet/node2/config/genesis.json
+cp \$GENESIS /code/.testnet/node3/config/genesis.json
 
 # Change bind addresses from 127.0.0.1 to 0.0.0.0 to expose ports in Docker
 for i in 0 1 2 3; do
@@ -44,7 +51,8 @@ done
 "
 
 echo "Initialization complete!"
-echo "Starting docker compose..."
-docker compose up -d
-
-echo "TAC 4-node localnet is up and running."
+echo "Next steps:"
+echo "  1. Start network: ./start-multinode.sh"
+echo "  2. Check status:  docker compose ps"
+echo "  3. Stop network:  ./stop-multinode.sh"
+echo ""

@@ -167,7 +167,7 @@ jobs:
                   if [ "$HEIGHT" -le 2 ] 2>/dev/null; then
                     echo "❌ Chain failed to produce blocks within timeout"
                     cd chains/${CHAIN_ENV}
-                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   # Verify height increases over two 10-second intervals
@@ -179,7 +179,7 @@ jobs:
                   if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
                     cd chains/${CHAIN_ENV}
-                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   echo "  Check 2 passed, waiting 10s..."
@@ -189,7 +189,7 @@ jobs:
                   if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
                     cd chains/${CHAIN_ENV}
-                    docker compose -f docker-compose.multinode.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs --tail=50 2>/dev/null || docker compose logs --tail=50 2>/dev/null || true
                     exit 1
                   fi
                   echo "✅ Chain is producing blocks (heights: $HEIGHT1 -> $HEIGHT2 -> $HEIGHT3)"
@@ -280,26 +280,26 @@ jobs:
                   echo ""
                   if [ "${CHAIN_ENV}" = "kava-docker" ]; then
                     echo "=== Kava validator1 logs (last 100 lines) ==="
-                    docker compose -f docker-compose.multinode.yml logs kava-validator1 --tail=100 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs kava-validator1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "0g-docker" ]; then
                     echo "=== Validator 1 Node logs (last 100 lines) ==="
-                    docker compose -f docker-compose.multinode.yml logs validator1-node --tail=100 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs validator1-node --tail=100 2>/dev/null || true
                     echo ""
                     echo "=== Validator 1 Geth logs (last 100 lines) ==="
-                    docker compose -f docker-compose.multinode.yml logs validator1-geth --tail=100 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs validator1-geth --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "story-docker" ]; then
                     cd story-localnet
                     echo "=== Story validator1 logs (last 100 lines) ==="
                     docker compose -f docker-compose-validator1.yml logs validator1-node --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
                     echo "=== Mezo validator-0 logs (last 100 lines) ==="
-                    docker compose -f docker-compose.multinode.yml logs mezo-validator-0 --tail=100 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs mezo-validator-0 --tail=100 2>/dev/null || true
                     echo ""
                     echo "=== Mezo validator-1 logs (last 100 lines) ==="
-                    docker compose -f docker-compose.multinode.yml logs mezo-validator-1 --tail=100 2>/dev/null || true
+                    docker compose -f docker-compose.yml logs mezo-validator-1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "=== Kii validator1 logs (last 100 lines) ==="
-                    docker compose --env-file .env.multinode -f docker-compose.multinode.yml logs kii-validator1 --tail=100 2>/dev/null || true
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs kii-validator1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "tac-docker" ]; then
                     echo "=== Tac node0 logs (last 100 lines) ==="
                     docker compose logs tac-node-0 --tail=100 2>/dev/null || true

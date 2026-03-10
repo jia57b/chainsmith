@@ -11,7 +11,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.multinode.yml"
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 if [ ! -f "${SCRIPT_DIR}/.env" ]; then
     echo "❌ .env not found. Run ./init-multinode.sh first."
@@ -43,8 +43,8 @@ done
 
 if [ $WAITED -ge $MAX_WAIT ]; then
     echo "   ⚠️  Timeout waiting for blocks. Check logs:"
-    echo "   1. Check logs:   docker compose -f docker-compose.multinode.yml logs validator1-node"
-    echo "   2. Check status: docker compose -f docker-compose.multinode.yml ps"
+    echo "   1. Check logs:   docker compose -f docker-compose.yml logs validator1-node"
+    echo "   2. Check status: docker compose -f docker-compose.yml ps"
     exit 1
 fi
 

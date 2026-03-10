@@ -1,4 +1,4 @@
-# docker-compose.multinode.yml
+# docker-compose.yml
 # Kii 4-Validator Localnet for ChainSmith Testing
 #
 # Architecture: Each validator = 1 kiichaind container (CometBFT consensus + EVM in same process)
@@ -6,9 +6,9 @@
 #
 # Usage:
 #   1. Init: ./init-multinode.sh
-#   2. Start: ./start-multinode.sh (or: docker compose --env-file .env.multinode -f docker-compose.multinode.yml up -d)
-#   3. Check: docker compose --env-file .env.multinode -f docker-compose.multinode.yml ps
-#   4. Logs:  docker compose --env-file .env.multinode -f docker-compose.multinode.yml logs -f kii-validator1
+#   2. Start: ./start-multinode.sh (or: docker compose --env-file .env.multinode -f docker-compose.yml up -d)
+#   3. Check: docker compose --env-file .env.multinode -f docker-compose.yml ps
+#   4. Logs:  docker compose --env-file .env.multinode -f docker-compose.yml logs -f kii-validator1
 #   5. Stop:  ./stop-multinode.sh
 
 services:

@@ -11,7 +11,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.multinode.yml"
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.yml"
 
 echo "🛑 Stopping Kii multi-validator localnet..."
 docker compose --env-file "${SCRIPT_DIR}/.env.multinode" -f "$COMPOSE_FILE" down 2>/dev/null || true
