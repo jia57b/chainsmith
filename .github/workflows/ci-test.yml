@@ -222,7 +222,7 @@ jobs:
               run: pnpm test:cosmos:api:sample
 
             - name: Test - Staking
-              if: inputs.tests == 'all' || inputs.chain == 'kii-docker'
+              if: (inputs.tests == 'all' && inputs.chain == 'kii-docker')
               continue-on-error: true
               run: pnpm test:staking:sample
 
