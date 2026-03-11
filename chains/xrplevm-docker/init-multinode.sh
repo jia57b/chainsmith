@@ -27,7 +27,8 @@ if [ ! -f /code/node/bin/exrpd ]; then
   echo "Building exrpd binary locally for initialization..."
   cd /code/node
   git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
-  make build
+  git config --global --add safe.directory /code/node
+  GOFLAGS=-buildvcs=false make build
   cd /code
 fi
 
