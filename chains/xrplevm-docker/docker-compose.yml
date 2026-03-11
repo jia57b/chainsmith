@@ -1,0 +1,62 @@
+x-node-common: &node-common
+    image: golang:1.23.8
+    entrypoint: ['/code/node/bin/exrpd']
+
+services:
+    xrplevm-node-0:
+        <<: *node-common
+        container_name: xrplevm-node-0
+        volumes:
+            - ./:/code
+        ports:
+            - '26651:26657'
+            - '1311:1317'
+            - '8541:8545'
+            - '8546:8546'
+            - '9090:9090'
+        command: >
+            start --home /code/.testnet/node0 --log_level info
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --chain-id xrplevm_1449999-1
+
+    xrplevm-node-1:
+        <<: *node-common
+        container_name: xrplevm-node-1
+        volumes:
+            - ./:/code
+        ports:
+            - '26652:26657'
+            - '1312:1317'
+            - '8542:8545'
+        command: >
+            start --home /code/.testnet/node1 --log_level info
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --chain-id xrplevm_1449999-1
+
+    xrplevm-node-2:
+        <<: *node-common
+        container_name: xrplevm-node-2
+        volumes:
+            - ./:/code
+        ports:
+            - '26653:26657'
+            - '1313:1317'
+            - '8543:8545'
+        command: >
+            start --home /code/.testnet/node2 --log_level info
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --chain-id xrplevm_1449999-1
+
+    xrplevm-node-3:
+        <<: *node-common
+        container_name: xrplevm-node-3
+        volumes:
+            - ./:/code
+        ports:
+            - '26654:26657'
+            - '1314:1317'
+            - '8544:8545'
+        command: >
+            start --home /code/.testnet/node3 --log_level info
+            --json-rpc.api eth,txpool,personal,net,debug,web3
+            --chain-id xrplevm_1449999-1

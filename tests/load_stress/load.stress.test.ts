@@ -19,6 +19,8 @@ interface LoadStressTestConfig {
             createNewWallet: boolean;
             fundingAmount: string;
             testTransactionAmount: string;
+            fundingBatchSize?: number;
+            fundingBatchDelayMs?: number;
             wallets?: { privateKey: string }[];
         };
     };
@@ -55,6 +57,8 @@ function getEnvConfig(): LoadStressConfig {
         createNewWallet: envConfig.createNewWallet,
         fundingAmount: envConfig.fundingAmount,
         testTransactionAmount: envConfig.testTransactionAmount,
+        fundingBatchSize: envConfig.fundingBatchSize,
+        fundingBatchDelayMs: envConfig.fundingBatchDelayMs,
         wallets: envConfig.wallets,
     };
 }

@@ -660,6 +660,82 @@ export class Blockchain implements IBlockchain {
     }
 
     /**
+     * Send multiple transactions in batches (batch-concurrent execution).
+     * Transactions within each batch are sent concurrently via Promise.all,
+     * but batches are executed sequentially with a configurable delay between them.
+     * This balances speed and mempool compatibility across different chain architectures
+     * (especially Cosmos SDK-based EVM chains that have strict nonce ordering).
+     *
+     * @param transactions Transaction array containing to and value fields
+     * @param fromWallet Optional sending wallet, uses founder wallet if not provided
+     * @param batchSize Number of transactions per batch (default 10)
+     * @param batchDelayMs Delay between batches in ms (default 200)
+     * @param priorityFeePerGas Optional priority fee
+     * @returns Array of transaction results
+     */
+    async sendMultipleTransactionsBatched(
+        transactions: Array<{ to: string; value: string }>,
+        fromWallet?: ethers.Wallet | ethers.HDNodeWallet,
+        batchSize: number = 10,
+        batchDelayMs: number = 200,
+        priorityFeePerGas?: bigint
+    ): Promise<any[]> {
+        try {
+            if (this.executeLayer !== BlockchainType.EVM) {
+                throw new Error(
+                    `sendMultipleTransactionsBatched requires EVM-compatible blockchain, got: ${this.executeLayer}`
+                );
+            }
+
+            const wallet = fromWallet ?? this.createFounderEthersWallet();
+            const provider = this.getDefaultExecuteLayerClient().getProvider();
+
+            const baseNonce = await provider.getTransactionCount(wallet.address, 'pending');
+            const feeData = await provider.getFeeData();
+
+            const allResults: any[] = [];
+            const totalBatches = Math.ceil(transactions.length / batchSize);
+
+            for (let batchIdx = 0; batchIdx < totalBatches; batchIdx++) {
+                const start = batchIdx * batchSize;
+                const end = Math.min(start + batchSize, transactions.length);
+                const batch = transactions.slice(start, end);
+
+                const txPromises = batch.map((transaction, i) => {
+                    const globalIndex = start + i;
+                    const tx: ethers.TransactionRequest = {
+                        to: transaction.to,
+                        value: ethers.parseEther(transaction.value),
+                        nonce: baseNonce + globalIndex,
+                    };
+
+                    if (priorityFeePerGas) {
+                        tx.maxPriorityFeePerGas = priorityFeePerGas;
+                    } else if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+                        tx.maxFeePerGas = feeData.maxFeePerGas;
+                        tx.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+                    } else {
+                        tx.gasPrice = feeData.gasPrice;
+                    }
+
+                    return wallet.sendTransaction(tx);
+                });
+
+                const batchResults = await Promise.all(txPromises);
+                allResults.push(...batchResults);
+
+                if (batchIdx < totalBatches - 1 && batchDelayMs > 0) {
+                    await sleepMs(batchDelayMs);
+                }
+            }
+
+            return allResults;
+        } catch (error) {
+            throw new Error(`Failed to send multiple transactions in batches: ${error}`);
+        }
+    }
+
+    /**
      * Send multiple transactions concurrently (parallel execution)
      * All transactions are sent simultaneously using Promise.all
      * This can result in multiple transactions being included in the same block

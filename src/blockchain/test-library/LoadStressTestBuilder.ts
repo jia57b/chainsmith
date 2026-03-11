@@ -12,6 +12,9 @@ export interface LoadStressConfig {
     createNewWallet: boolean;
     fundingAmount: string;
     testTransactionAmount: string;
+    // Funding configuration
+    fundingBatchSize?: number;
+    fundingBatchDelayMs?: number;
     // Option 1: Direct wallet configs (for local testing only, not recommended for non-local)
     wallets?: WalletConfig[];
     // Option 2: Load from environment variables (recommended for testnet/qa)
@@ -44,6 +47,8 @@ export class LoadStressTestBuilder {
             createNewWallet: true,
             fundingAmount: '0.1',
             testTransactionAmount: '0.001',
+            fundingBatchSize: 10,
+            fundingBatchDelayMs: 200,
             ...config,
         };
 
@@ -313,7 +318,10 @@ export class LoadStressTestBuilder {
     }
 
     /**
-     * Fund a list of wallets using batch transactions
+     * Fund a list of wallets using batched transactions.
+     * Uses batch-concurrent sending: transactions within each batch are sent concurrently,
+     * but batches are executed sequentially with a delay to ensure mempool compatibility
+     * across all chain types (including Cosmos SDK-based EVM chains).
      */
     private async fundWallets(
         wallets: any[],
@@ -321,20 +329,28 @@ export class LoadStressTestBuilder {
         fundingTransactions: any[],
         walletType: string
     ): Promise<void> {
-        console.log(`   🚀 Funding ${walletType} with ${fundingAmount} ETH using founder wallet...`);
+        const BATCH_SIZE = this.loadStressConfig.fundingBatchSize ?? 10;
+        const BATCH_DELAY_MS = this.loadStressConfig.fundingBatchDelayMs ?? 200;
+        const totalBatches = Math.ceil(wallets.length / BATCH_SIZE);
+        console.log(
+            `   🚀 Funding ${walletType} with ${fundingAmount} ETH using founder wallet...` +
+                ` (${wallets.length} wallets in ${totalBatches} batches of ${BATCH_SIZE})`
+        );
         const fundingStartTime = Date.now();
 
         try {
-            // Prepare all transactions
             const transactions = wallets.map(wallet => ({
                 to: wallet.address,
                 value: fundingAmount,
             }));
 
-            // Send all transactions in batch using founder wallet
-            const results = await this.blockchain.sendMultipleTransactionsConcurrent(transactions);
+            const results = await this.blockchain.sendMultipleTransactionsBatched(
+                transactions,
+                undefined,
+                BATCH_SIZE,
+                BATCH_DELAY_MS
+            );
 
-            // Process results
             results.forEach((tx: any, index: number) => {
                 console.log(`   📤 Funded ${walletType} ${index + 1}: ${wallets[index].address} -> Hash: ${tx?.hash}`);
                 fundingTransactions.push({
@@ -352,6 +368,60 @@ export class LoadStressTestBuilder {
         }
     }
 
+    /** Fixed gas limit for simple ETH transfers (21000 gas). */
+    private static readonly SIMPLE_TRANSFER_GAS_LIMIT = 21000n;
+
+    /**
+     * Pre-fetch the full transaction context (gas params, chainId) once.
+     * This data is shared across all wallets in a batch so we only hit
+     * the RPC once instead of N times.
+     */
+    private async prefetchTxContext(): Promise<{
+        chainId: bigint;
+        gasParams: { type: number; maxFeePerGas?: bigint; maxPriorityFeePerGas?: bigint; gasPrice?: bigint };
+    }> {
+        const provider = this.getProvider();
+        const [feeData, network] = await Promise.all([provider.getFeeData(), provider.getNetwork()]);
+        const gasParams =
+            feeData.maxFeePerGas && feeData.maxPriorityFeePerGas
+                ? { type: 2, maxFeePerGas: feeData.maxFeePerGas, maxPriorityFeePerGas: feeData.maxPriorityFeePerGas }
+                : { type: 0, gasPrice: feeData.gasPrice ?? undefined };
+        return { chainId: network.chainId, gasParams };
+    }
+
+    /**
+     * Pre-fetch nonces for a list of wallets. Fetches sequentially in small
+     * groups to avoid overwhelming the RPC endpoint.
+     */
+    private async prefetchNonces(
+        wallets: (ethers.Wallet | ethers.HDNodeWallet)[],
+        groupSize: number = 20
+    ): Promise<number[]> {
+        const provider = this.getProvider();
+        const nonces: number[] = new Array(wallets.length);
+        for (let i = 0; i < wallets.length; i += groupSize) {
+            const group = wallets.slice(i, Math.min(i + groupSize, wallets.length));
+            const results = await Promise.all(group.map(w => provider.getTransactionCount(w.address, 'pending')));
+            results.forEach((n, j) => {
+                nonces[i + j] = n;
+            });
+        }
+        return nonces;
+    }
+
+    /**
+     * Sign a transaction locally and broadcast the raw bytes.
+     * The ONLY RPC call made is `eth_sendRawTransaction`.
+     */
+    private async signAndBroadcast(
+        wallet: ethers.Wallet | ethers.HDNodeWallet,
+        txRequest: ethers.TransactionLike
+    ): Promise<ethers.TransactionResponse> {
+        const provider = this.getProvider();
+        const signed = await wallet.signTransaction(txRequest);
+        return provider.broadcastTransaction(signed);
+    }
+
     /**
      * Execute concurrent load test
      *
@@ -364,13 +434,22 @@ export class LoadStressTestBuilder {
         console.log(`\n🚀 Starting concurrent load test...`);
         console.log(`   Destination: ${destAddress}`);
         console.log(`   Amount: ${transactionAmount} ETH`);
+
+        console.log(`   📡 Pre-fetching transaction context & nonces for ${this.wallets.length} wallets...`);
+        const { chainId, gasParams } = await this.prefetchTxContext();
+        const nonces = await this.prefetchNonces(this.wallets);
+
         this.startTime = Date.now();
 
         const transactions = this.wallets.map(async (wallet, index) => {
             try {
-                const tx = await wallet.sendTransaction({
+                const tx = await this.signAndBroadcast(wallet, {
                     to: destAddress,
                     value: ethers.parseEther(transactionAmount),
+                    nonce: nonces[index],
+                    gasLimit: LoadStressTestBuilder.SIMPLE_TRANSFER_GAS_LIMIT,
+                    chainId,
+                    ...gasParams,
                 });
                 console.log(`   Transaction ${index + 1}: ${wallet.address} -> ${destAddress} (${tx.hash})`);
                 return { success: true, hash: tx.hash, index };
@@ -404,27 +483,34 @@ export class LoadStressTestBuilder {
         console.log(`\n🚀 Starting batch transaction test...`);
         console.log(`   Batch size: ${batchSize}`);
         console.log(`   Destination: ${destAddress}`);
-        this.startTime = Date.now();
 
-        const batches: any[][] = [];
+        const batches: { wallet: any; globalIndex: number }[][] = [];
         for (let i = 0; i < this.wallets.length; i += batchSize) {
-            const batch = this.wallets.slice(i, i + batchSize);
+            const batch = this.wallets.slice(i, i + batchSize).map((w, j) => ({ wallet: w, globalIndex: i + j }));
             batches.push(batch);
         }
 
         console.log(`   Created ${batches.length} batches`);
+        console.log(`   📡 Pre-fetching transaction context & nonces for ${this.wallets.length} wallets...`);
+        const { chainId, gasParams } = await this.prefetchTxContext();
+        const nonces = await this.prefetchNonces(this.wallets);
 
+        this.startTime = Date.now();
         const allResults: any[] = [];
 
         for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
             const batch = batches[batchIndex];
             console.log(`   Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} transactions)`);
 
-            const batchTransactions = batch.map(async (wallet, index) => {
+            const batchTransactions = batch.map(async ({ wallet, globalIndex }, index) => {
                 try {
-                    const tx = await wallet.sendTransaction({
+                    const tx = await this.signAndBroadcast(wallet, {
                         to: destAddress,
                         value: ethers.parseEther(this.getTestTransactionAmount()),
+                        nonce: nonces[globalIndex],
+                        gasLimit: LoadStressTestBuilder.SIMPLE_TRANSFER_GAS_LIMIT,
+                        chainId,
+                        ...gasParams,
                     });
                     return { success: true, hash: tx.hash };
                 } catch (error) {
@@ -441,6 +527,13 @@ export class LoadStressTestBuilder {
             allResults.push(...batchResults);
 
             console.log(`   ✅ Batch ${batchIndex + 1} completed: ${successfulInBatch}/${batch.length} successful`);
+
+            // Increment nonces for wallets that succeeded (for multi-round tests)
+            batch.forEach(({ globalIndex }, i) => {
+                if (batchResults[i].success) {
+                    nonces[globalIndex]++;
+                }
+            });
 
             // Small delay between batches
             if (batchIndex < batches.length - 1) {
@@ -468,8 +561,12 @@ export class LoadStressTestBuilder {
         console.log(`\n🚀 Starting gas price optimization test...`);
         console.log(`   Destination: ${destAddress}`);
         console.log(`   Gas prices to test: ${gasPrices.length}`);
-        this.startTime = Date.now();
 
+        console.log(`   📡 Pre-fetching transaction context & nonces...`);
+        const { chainId } = await this.prefetchTxContext();
+        const nonces = await this.prefetchNonces(this.wallets);
+
+        this.startTime = Date.now();
         const allResults: any[] = [];
         const provider = this.getProvider();
 
@@ -479,9 +576,13 @@ export class LoadStressTestBuilder {
 
             const transactions = this.wallets.map(async (wallet, index) => {
                 try {
-                    const tx = await wallet.sendTransaction({
+                    const tx = await this.signAndBroadcast(wallet, {
                         to: destAddress,
                         value: ethers.parseEther(this.getTestTransactionAmount()),
+                        nonce: nonces[index],
+                        gasLimit: LoadStressTestBuilder.SIMPLE_TRANSFER_GAS_LIMIT,
+                        chainId,
+                        type: 0,
                         gasPrice: gasPrice,
                     });
                     return {
@@ -502,6 +603,13 @@ export class LoadStressTestBuilder {
             });
 
             const gasResults = await Promise.all(transactions);
+
+            // Increment nonces for successful transactions
+            this.wallets.forEach((_, i) => {
+                if (gasResults[i]?.success) {
+                    nonces[i]++;
+                }
+            });
             const gasSubmissionEndTime = Date.now();
             const submissionDuration = gasSubmissionEndTime - gasStartTime;
 
@@ -581,25 +689,29 @@ export class LoadStressTestBuilder {
         console.log(`\n🚀 Starting sustained load test...`);
         console.log(`   Duration: ${duration} minutes`);
         console.log(`   Destination: ${destAddress}`);
-        this.startTime = Date.now();
 
-        const totalDuration = duration * 60 * 1000; // Convert to milliseconds
+        const totalDuration = duration * 60 * 1000;
         const allResults: any[] = [];
         let transactionCount = 0;
         let successCount = 0;
         let failureCount = 0;
         let batchCount = 0;
 
-        // Ensure batchSize is within reasonable limits
         const actualBatchSize = Math.min(Math.max(1, batchSize), this.wallets.length);
-        const actualInterval = Math.max(100, batchIntervalMs); // Minimum 100ms interval
+        const actualInterval = Math.max(100, batchIntervalMs);
 
         console.log(`   📊 Sustained transaction sending parameters:`);
         console.log(`   ⏱️ Duration: ${duration} minutes (${totalDuration}ms)`);
         console.log(`   📦 Batch size: ${actualBatchSize} transactions per batch`);
         console.log(`   ⏱️ Batch interval: ${actualInterval}ms`);
-        // console.log(`   🎯 Theoretical max send rate: ${(actualBatchSize * (1000 / actualInterval)).toFixed(2)} tx/s`);
 
+        console.log(`   📡 Pre-fetching transaction context & nonces...`);
+        let txCtx = await this.prefetchTxContext();
+        const nonces = await this.prefetchNonces(this.wallets);
+        let txCtxAge = Date.now();
+        const TX_CTX_REFRESH_INTERVAL = 15000;
+
+        this.startTime = Date.now();
         const startTime = Date.now();
         const endTime = startTime + totalDuration;
 
@@ -607,20 +719,30 @@ export class LoadStressTestBuilder {
             const batchStartTime = Date.now();
             batchCount++;
 
-            // Send a batch of transactions concurrently
+            if (Date.now() - txCtxAge > TX_CTX_REFRESH_INTERVAL) {
+                txCtx = await this.prefetchTxContext();
+                txCtxAge = Date.now();
+            }
+
             const batchTransactions: Promise<any>[] = [];
+            const batchWalletIndices: number[] = [];
             for (let i = 0; i < actualBatchSize; i++) {
                 const walletIndex = (transactionCount + i) % this.wallets.length;
                 const currentWallet = this.wallets[walletIndex];
+                batchWalletIndices.push(walletIndex);
 
-                const txPromise = currentWallet
-                    .sendTransaction({
-                        to: destAddress,
-                        value: ethers.parseEther(this.getTestTransactionAmount()),
-                    })
+                const txPromise = this.signAndBroadcast(currentWallet, {
+                    to: destAddress,
+                    value: ethers.parseEther(this.getTestTransactionAmount()),
+                    nonce: nonces[walletIndex],
+                    gasLimit: LoadStressTestBuilder.SIMPLE_TRANSFER_GAS_LIMIT,
+                    chainId: txCtx.chainId,
+                    ...txCtx.gasParams,
+                })
                     .then((tx: any) => {
                         transactionCount++;
                         successCount++;
+                        nonces[walletIndex]++;
                         return {
                             success: true,
                             hash: tx.hash,
@@ -643,7 +765,6 @@ export class LoadStressTestBuilder {
                 batchTransactions.push(txPromise);
             }
 
-            // Wait for all transactions in the batch to complete
             const batchResults = await Promise.all(batchTransactions);
             allResults.push(...batchResults);
 

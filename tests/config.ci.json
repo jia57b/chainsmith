@@ -460,5 +460,77 @@
             "privateKey": "",
             "privateKeySource": "local"
         }
+    },
+    "xrplevm-docker": {
+        "description": "XRPLEVM Local Multi-Validator Devnet (4 validators)",
+        "supportedCosmosModules": ["staking", "staking_delegation", "slashing"],
+        "consensusLayer": "cosmos",
+        "executeLayer": "evm",
+        "chainId": 1449999,
+        "executeLayerHttpRpcUrl": "http://localhost:8541",
+        "consensusLayerRpcUrl": "http://localhost:26651",
+        "consensusLayerHttpRestApiUrl": "http://localhost:1311",
+        "consensusRestApiPathPrefix": "/cosmos",
+        "consensusRestApiVersion": "v1beta1",
+        "executionMethod": "docker",
+        "docker": {
+            "containerPatterns": {
+                "executionLayer": "xrplevm-node-{index}",
+                "consensusLayer": "xrplevm-node-{index}"
+            },
+            "timeout": 30000
+        },
+        "nodes": [
+            {
+                "index": 0,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 8541,
+                "consensusLayerRpcPort": 26651,
+                "consensusLayerHttpRestApiPort": 1311,
+                "consensusLayerP2pCommPort": 26656
+            },
+            {
+                "index": 1,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 8542,
+                "consensusLayerRpcPort": 26652,
+                "consensusLayerHttpRestApiPort": 1312,
+                "consensusLayerP2pCommPort": 26656
+            },
+            {
+                "index": 2,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 8543,
+                "consensusLayerRpcPort": 26653,
+                "consensusLayerHttpRestApiPort": 1313,
+                "consensusLayerP2pCommPort": 26656
+            },
+            {
+                "index": 3,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 8544,
+                "consensusLayerRpcPort": 26654,
+                "consensusLayerHttpRestApiPort": 1314,
+                "consensusLayerP2pCommPort": 26656
+            }
+        ],
+        "founderWallet": {
+            "name": "devnet-faucet",
+            "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "privateKey": "",
+            "privateKeySource": "local"
+        }
     }
 }

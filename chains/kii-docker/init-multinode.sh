@@ -80,6 +80,31 @@ echo "  Chain ID: ${CHAIN_ID}"
 echo "============================================"
 echo ""
 
+# Pre-flight: ensure Docker image exists locally (build from source if missing)
+KII_REPO="https://github.com/KiiChain/kiichain.git"
+KII_BRANCH="${KII_BRANCH:-v7.0.1}"
+KII_BUILD_DIR="/tmp/kiichain-src"
+
+if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  echo "📥 Docker image '${IMAGE}' not found locally. Building from source..."
+  echo "   Repository: ${KII_REPO} (branch: ${KII_BRANCH})"
+  rm -rf "$KII_BUILD_DIR"
+  if ! git clone --depth 1 --branch "$KII_BRANCH" "$KII_REPO" "$KII_BUILD_DIR"; then
+    echo "❌ Error: Failed to clone KiiChain repository."
+    echo "   Please check your network connection and that branch '${KII_BRANCH}' exists."
+    exit 1
+  fi
+  if ! docker build -t "$IMAGE" "$KII_BUILD_DIR"; then
+    echo "❌ Error: Failed to build Docker image '${IMAGE}'."
+    echo "   Check the build output above for details."
+    rm -rf "$KII_BUILD_DIR"
+    exit 1
+  fi
+  rm -rf "$KII_BUILD_DIR"
+  echo "   ✅ Image '${IMAGE}' built successfully"
+  echo ""
+fi
+
 # ----------------------------------------------------------
 # Step 1: Clean old volumes
 # ----------------------------------------------------------

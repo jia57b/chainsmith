@@ -19,6 +19,7 @@ on:
                     - mezo-docker
                     - kii-docker
                     - tac-docker
+                    - xrplevm-docker
             tests:
                 description: 'Run tests'
                 required: false
@@ -104,6 +105,8 @@ jobs:
                     cd /tmp/tacchain-src
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t tacchain:local .
                     echo "tacchain:local built successfully"
+                  elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
+                    echo "no need to build xrplevm Docker image in this step."
                   fi
 
             - name: Initialize multinode localnet
@@ -127,6 +130,9 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "tac-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   fi
@@ -153,6 +159,8 @@ jobs:
                   PORT=26657
                   if [ "${CHAIN_ENV}" = "tac-docker" ]; then
                     PORT=45111
+                  elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
+                    PORT=26651
                   fi
                   while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
                     ATTEMPT=$((ATTEMPT + 1))
@@ -303,6 +311,9 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "tac-docker" ]; then
                     echo "=== Tac node0 logs (last 100 lines) ==="
                     docker compose logs tac-node-0 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
+                    echo "=== xrplevm node0 logs (last 100 lines) ==="
+                    docker compose logs xrplevm-node-0 --tail=100 2>/dev/null || true
                   fi
 
             - name: Stop localnet

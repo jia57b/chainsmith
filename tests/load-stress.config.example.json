@@ -5,12 +5,16 @@
         "local": {
             "createNewWallet": true,
             "fundingAmount": "0.1",
-            "testTransactionAmount": "0.001"
+            "testTransactionAmount": "0.001",
+            "fundingBatchSize": 50,
+            "fundingBatchDelayMs": 200
         },
         "testnet": {
             "createNewWallet": false,
             "fundingAmount": "0.1",
             "testTransactionAmount": "0.001",
+            "fundingBatchSize": 50,
+            "fundingBatchDelayMs": 200,
             "walletEnvPrefix": "LOAD_WALLET_PK",
             "walletCount": 3
         },
@@ -18,6 +22,8 @@
             "createNewWallet": false,
             "fundingAmount": "0.05",
             "testTransactionAmount": "0.0001",
+            "fundingBatchSize": 50,
+            "fundingBatchDelayMs": 200,
             "walletEnvPrefix": "LOAD_WALLET_PK",
             "walletCount": 5
         }
@@ -26,7 +32,7 @@
         "stress01": {
             "name": "Concurrent Transaction Test",
             "description": "Multiple source wallets sending transactions concurrently",
-            "sourceWalletCount": 10,
+            "sourceWalletCount": 50,
             "destWalletCount": 1,
             "timeout": 900000
         },
@@ -35,11 +41,7 @@
             "description": "Test batch transactions with different batch sizes",
             "sourceWalletCount": 50,
             "destWalletCount": 1,
-            "batchSize": [
-                2,
-                5,
-                10
-            ],
+            "batchSize": [2, 5, 10],
             "timeout": 600000
         },
         "stress03": {
@@ -47,12 +49,7 @@
             "description": "Test transactions with different gas prices",
             "sourceWalletCount": 50,
             "destWalletCount": 1,
-            "gasPricesGwei": [
-                20,
-                30,
-                40,
-                50
-            ],
+            "gasPricesGwei": [20, 30, 40, 50],
             "timeout": 600000
         },
         "load01": {
