@@ -106,7 +106,8 @@ jobs:
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t tacchain:local .
                     echo "tacchain:local built successfully"
                   elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
-                    echo "no need to build xrplevm Docker image in this step."
+                    echo "Cloning xrplevm node repository..."
+                    git clone --depth 1 https://github.com/xrplevm/node.git node
                   fi
 
             - name: Initialize multinode localnet
