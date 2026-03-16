@@ -679,4 +679,161 @@ export class StakingTestBuilder {
     getTokensAfterUnstake(): bigint {
         return this.tokensAfterUnstake;
     }
+
+    // ========================================================================
+    // Public single-operation methods for granular tests
+    // ========================================================================
+
+    /**
+     * Delegate a specific amount from a wallet to the configured (or specified) validator.
+     * Returns the transaction receipt.
+     */
+    async delegateFrom(wallet: ethers.Wallet, amount: string, validatorAddr?: string): Promise<any> {
+        const target = validatorAddr ?? this.validatorAddress;
+        if (!target) {
+            throw new Error('Validator address required');
+        }
+        const savedAddr = this.validatorAddress;
+        this.validatorAddress = target;
+        try {
+            return await this.performPrecompileDelegation(wallet, amount);
+        } finally {
+            this.validatorAddress = savedAddr;
+        }
+    }
+
+    /**
+     * Undelegate a specific amount from a wallet.
+     * Returns the transaction receipt.
+     */
+    async undelegateFrom(wallet: ethers.Wallet, amount: string, validatorAddr?: string): Promise<any> {
+        const target = validatorAddr ?? this.validatorAddress;
+        if (!target) {
+            throw new Error('Validator address required');
+        }
+        const savedAddr = this.validatorAddress;
+        this.validatorAddress = target;
+        try {
+            return await this.performPrecompileUndelegation(wallet, amount);
+        } finally {
+            this.validatorAddress = savedAddr;
+        }
+    }
+
+    /**
+     * Redelegate tokens from one validator to another via the precompile.
+     */
+    async redelegateFrom(
+        wallet: ethers.Wallet,
+        srcValidator: string,
+        dstValidator: string,
+        amount: string
+    ): Promise<any> {
+        const contract = this.getStakingContract(wallet);
+        const amountWei = ethers.parseEther(amount);
+
+        console.log(
+            `   Precompile redelegate: delegator=${wallet.address}, src=${srcValidator}, dst=${dstValidator}, amount=${amountWei.toString()}`
+        );
+
+        const tx = await contract.redelegate(wallet.address, srcValidator, dstValidator, amountWei, {
+            gasLimit: 500000,
+        });
+
+        const receipt = await tx.wait();
+        if (!receipt || receipt.status !== 1) {
+            throw new Error(`Redelegation tx reverted (status=${receipt?.status})`);
+        }
+
+        console.log(
+            `   Redelegation tx confirmed in block ${receipt.blockNumber}, gas used: ${receipt.gasUsed.toString()}`
+        );
+        return receipt;
+    }
+
+    /**
+     * Query unbonding delegation info via precompile view function.
+     */
+    async queryUnbondingDelegation(delegatorAddress: string, validatorAddr?: string): Promise<any | null> {
+        const valAddr = validatorAddr ?? this.validatorAddress;
+        if (!valAddr) {
+            throw new Error('Validator address required');
+        }
+
+        try {
+            const contract = new ethers.Contract(this.precompileAddress, this.precompileAbi, this.provider);
+            const result = await contract.unbondingDelegation(delegatorAddress, valAddr);
+            return result;
+        } catch {
+            console.log(`   No unbonding delegation found for ${delegatorAddress} -> ${valAddr}`);
+            return null;
+        }
+    }
+
+    /**
+     * Query validator info via precompile view function.
+     * NOTE: the precompile `validator(address)` expects the EVM address of the validator.
+     */
+    async queryValidatorViaPrecompile(validatorEvmAddress: string): Promise<any | null> {
+        try {
+            const contract = new ethers.Contract(this.precompileAddress, this.precompileAbi, this.provider);
+            const result = await contract.validator(validatorEvmAddress);
+            return result;
+        } catch {
+            console.log(`   No validator info found for ${validatorEvmAddress}`);
+            return null;
+        }
+    }
+
+    /**
+     * Discover multiple bonded validators. Returns an array of operator_addresses.
+     */
+    async discoverMultipleValidators(count: number = 2): Promise<string[]> {
+        if (!this.consensusClient) {
+            throw new Error('Consensus layer client required for validator discovery');
+        }
+
+        const response = await this.consensusClient.getStakingValidators();
+        const validators = response.validators ?? [];
+        const bonded = validators.filter((v: any) => v.status === 'BOND_STATUS_BONDED');
+        const chosen = bonded.length >= count ? bonded.slice(0, count) : validators.slice(0, count);
+
+        if (chosen.length < count) {
+            throw new Error(`Need ${count} validators but only found ${chosen.length}`);
+        }
+
+        const addresses = chosen.map((v: any) => v.operator_address);
+        console.log(`   Discovered ${addresses.length} validators: ${addresses.join(', ')}`);
+        return addresses;
+    }
+
+    /**
+     * Query validator tokens (raw bigint) from REST API.
+     */
+    async getValidatorTokens(validatorAddr?: string): Promise<bigint> {
+        const addr = validatorAddr ?? this.validatorAddress;
+        if (!addr) {
+            throw new Error('Validator address required');
+        }
+        const client = this.consensusClient as CosmosConsensusClient;
+        const response = await client.getStakingValidator(addr);
+        const tokens = response.validator?.tokens;
+        return tokens ? BigInt(tokens) : 0n;
+    }
+
+    /**
+     * Get the provider for direct balance queries in tests.
+     */
+    getProvider(): ethers.JsonRpcProvider {
+        return this.provider;
+    }
+
+    /**
+     * Get the blockchain instance for direct access in tests.
+     */
+    getBlockchain(): Blockchain {
+        return this.blockchain;
+    }
+
+    // ========================================================================
 }

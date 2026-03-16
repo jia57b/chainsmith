@@ -199,6 +199,7 @@ docker run --rm --user root \
 
     # Patch denominations across all modules
     jq ".app_state.staking.params.bond_denom = \"akii\" |
+        .app_state.staking.params.unbonding_time = \"10s\" |
         .app_state.crisis.constant_fee.denom = \"akii\" |
         .app_state.gov.deposit_params.min_deposit[0].denom = \"akii\" |
         .app_state.gov.params.min_deposit[0].denom = \"akii\" |
