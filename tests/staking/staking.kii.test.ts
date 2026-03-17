@@ -52,11 +52,8 @@ async function createBuilder(testName: string): Promise<{
     return { builder, stakeAmount, fundAmount };
 }
 
-// ============================================================================
-// S-01: Staking Basic Lifecycle & Queries Validation (Combined S-01, S-02, S-14, S-15, S-16, S-17)
-// ============================================================================
-describe('S-01: Staking Basic Lifecycle & Queries Validation', () => {
-    it('should delegate and verify through precompile & REST, and validate global staking info', async function () {
+describe('Staking tests', () => {
+    it('S-01: should delegate and verify through precompile & REST, and validate global staking info', async function () {
         this.timeout(120000);
         const { builder, stakeAmount, fundAmount } = await createBuilder('S-01: Basic Delegate & Queries');
 
@@ -101,13 +98,8 @@ describe('S-01: Staking Basic Lifecycle & Queries Validation', () => {
 
         await builder.cleanup();
     });
-});
 
-// ============================================================================
-// S-02: Wallet Balance & Full Lifecycle (Stake -> Partial -> Full Unbond -> Refund) (Combined S-05, S-06, S-07, S-20, S-21)
-// ============================================================================
-describe('S-02: Wallet Balance & Full Unbonding Lifecycle', () => {
-    it('should execute partial/full undelegate smoothly and restore wallet balance automatically', async function () {
+    it('S-02: should execute partial/full undelegate smoothly and restore wallet balance automatically', async function () {
         this.timeout(600000); // 10 minutes max for dynamic unbonding
         const { builder, stakeAmount, fundAmount } = await createBuilder('S-02: Full Lifecycle & Balance Tracker');
 
@@ -204,13 +196,8 @@ describe('S-02: Wallet Balance & Full Unbonding Lifecycle', () => {
 
         await builder.cleanup();
     });
-});
 
-// ============================================================================
-// S-03: Staking Constraints & Validations (Combined Negative Tests: S-09, S-10, S-11, S-12)
-// ============================================================================
-describe('S-03: Staking Constraints (Negative Tests)', () => {
-    it('should correctly revert on zero amount, insufficient funds, and false undelegations', async function () {
+    it('S-03: should correctly revert on zero amount, insufficient funds, and false undelegations', async function () {
         this.timeout(120000);
         // We only prepare a tiny fund amount of "1.0" for insufficient tests
         const { builder } = await createBuilder('S-03: Constraints Testing');
@@ -265,13 +252,8 @@ describe('S-03: Staking Constraints (Negative Tests)', () => {
 
         await builder.cleanup();
     });
-});
 
-// ============================================================================
-// S-04: Incremental Delegation (multiple stakes to same validator)
-// ============================================================================
-describe('S-04: Incremental Delegation', () => {
-    it('should accumulate delegation amount across multiple delegate calls', async function () {
+    it('S-04: should accumulate delegation amount across multiple delegate calls', async function () {
         this.timeout(180000);
         const { builder, fundAmount } = await createBuilder('S-04: Incremental Delegation');
         const incrementAmount = '1';
@@ -311,13 +293,8 @@ describe('S-04: Incremental Delegation', () => {
 
         await builder.cleanup();
     });
-});
 
-// ============================================================================
-// S-08: Redelegate between validators
-// ============================================================================
-describe('S-08: Redelegate', () => {
-    it('should redelegate tokens from one validator to another', async function () {
+    it('S-05: should redelegate tokens from one validator to another', async function () {
         this.timeout(180000);
         const { builder, stakeAmount, fundAmount } = await createBuilder('S-08: Redelegate');
 
@@ -368,13 +345,8 @@ describe('S-08: Redelegate', () => {
 
         await builder.cleanup();
     });
-});
 
-// ============================================================================
-// S-13: Multi-wallet Concurrent Delegation
-// ============================================================================
-describe('S-13: Multi-wallet Concurrent Delegation', () => {
-    it('should handle concurrent delegations from multiple wallets', async function () {
+    it('S-06: should handle concurrent delegations from multiple wallets', async function () {
         this.timeout(180000);
         const { builder, stakeAmount, fundAmount } = await createBuilder('S-13: Concurrent Delegation');
         const walletCount = 3;
@@ -423,13 +395,58 @@ describe('S-13: Multi-wallet Concurrent Delegation', () => {
         );
         await builder.cleanup();
     });
-});
 
-// ============================================================================
-// S-19: Token Precision Verification
-// ============================================================================
-describe('S-19: Token Precision Verification', () => {
-    it('should accurately track validator token changes at Wei precision', async function () {
+    it('S-07: should handle concurrent delegations from multiple wallets', async function () {
+        this.timeout(180000);
+        const { builder, stakeAmount, fundAmount } = await createBuilder('S-13: Concurrent Delegation');
+        const walletCount = 3;
+
+        await builder.discoverValidator();
+        await builder.prepareWallets(walletCount, fundAmount);
+        const wallets = builder.getWallets();
+
+        const tokensBefore = await builder.getValidatorTokens();
+
+        const results = await Promise.all(
+            wallets.map(async (wallet: ethers.Wallet, index: number) => {
+                try {
+                    const receipt = await builder.delegateFrom(wallet, stakeAmount);
+                    return { index, success: receipt.status === 1, hash: receipt.hash };
+                } catch (err) {
+                    return { index, success: false, error: String(err) };
+                }
+            })
+        );
+
+        const successful = results.filter(r => r.success);
+        console.log(`   Concurrent delegations: ${successful.length}/${walletCount} successful`);
+        expect(successful.length).to.equal(walletCount);
+
+        await builder.getBlockchain().waitForBlocks(2, 3000);
+
+        for (const wallet of wallets) {
+            const delegation = await builder.queryDelegation(wallet.address);
+            expect(delegation).to.not.be.null;
+            expect(delegation!.amount > 0n, 'Each wallet should have positive delegation').to.be.true;
+        }
+
+        const tokensAfter = await builder.getValidatorTokens();
+        const totalIncrease = tokensAfter - tokensBefore;
+        const expectedTotal = ethers.parseEther(stakeAmount) * BigInt(walletCount);
+        const tolerance = expectedTotal / 50n;
+        const diff = totalIncrease > expectedTotal ? totalIncrease - expectedTotal : expectedTotal - totalIncrease;
+        expect(
+            diff <= tolerance,
+            `Total token increase ${ethers.formatEther(totalIncrease)} should be ~${Number(stakeAmount) * walletCount}`
+        ).to.be.true;
+
+        console.log(
+            `   Total validator token increase: ${ethers.formatEther(totalIncrease)} (expected: ${Number(stakeAmount) * walletCount})`
+        );
+        await builder.cleanup();
+    });
+
+    it('S-08: should accurately track validator token changes at Wei precision', async function () {
         this.timeout(180000);
         const { builder, fundAmount } = await createBuilder('S-19: Token Precision');
         const preciseAmount = '1.5';
