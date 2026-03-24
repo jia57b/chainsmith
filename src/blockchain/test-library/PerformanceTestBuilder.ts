@@ -1,4 +1,3 @@
-import { expect } from 'chai';
 import { Config } from '../../utils/common';
 import { Blockchain } from '../../core/Blockchain';
 
@@ -27,9 +26,20 @@ export class PerformanceTestBuilder {
             const privateKey = this.blockchain.founderWallet?.privateKey ?? Config.founderWalletPrivateKey;
             const founderAddress = this.blockchain.founderWallet?.address ?? '';
 
-            await expect(
-                this.blockchain.sendSimpleTransactionViaPublicEndpoint(founderAddress, '0.1', privateKey)
-            ).to.not.be.rejectedWith(Error);
+            const transaction = await this.blockchain.sendSimpleTransactionViaPublicEndpoint(
+                founderAddress,
+                '0.1',
+                privateKey
+            );
+
+            if (!transaction.hash) {
+                throw new Error('Transaction hash was not returned');
+            }
+
+            const receipt = await this.blockchain.waitForTransaction(transaction.hash);
+            if (!receipt || receipt.status !== 1) {
+                throw new Error('Transaction was not confirmed on-chain');
+            }
 
             const endTime = Date.now();
             this.timeTaken = endTime - startTime;

@@ -2,6 +2,7 @@
     "testConfig": {
         "performanceExpect": {
             "tokenTransfer": {
+                "runs": 10,
                 "threshold": 10000,
                 "percentage": 90
             }

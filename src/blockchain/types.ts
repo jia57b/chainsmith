@@ -292,12 +292,17 @@ export interface IConsensusLayerClient {
     // Slashing Module APIs - supports custom path
     getSlashingParams(customPath?: string): Promise<any>;
     getSlashingSigningInfos(customPath?: string): Promise<any>;
+    getSlashingSigningInfo(consAddress: string, customPath?: string): Promise<any>;
 
     // Mint Module APIs - supports custom path
     getMintParams(customPath?: string): Promise<any>;
 
     // Node and Chain Information - supports custom path
     getNodeInfo(customPath?: string): Promise<any>;
+
+    // Auth / Tx APIs
+    getAuthAccount(address: string, customPath?: string): Promise<any>;
+    broadcastTx(txBytesBase64: string, mode?: string, customPath?: string): Promise<any>;
 }
 
 /**

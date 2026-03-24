@@ -44,6 +44,17 @@ fi
 # Strip 0x prefix if present
 FOUNDER_ETH_PRIVKEY="${TEST_WALLET_PRIVATE_KEY#0x}"
 
+VALIDATOR_ETH_PRIVKEY_1="${VALIDATOR_ETH_PRIVKEY_1:-1111111111111111111111111111111111111111111111111111111111111111}"
+VALIDATOR_ETH_PRIVKEY_2="${VALIDATOR_ETH_PRIVKEY_2:-2222222222222222222222222222222222222222222222222222222222222222}"
+VALIDATOR_ETH_PRIVKEY_3="${VALIDATOR_ETH_PRIVKEY_3:-3333333333333333333333333333333333333333333333333333333333333333}"
+VALIDATOR_ETH_PRIVKEY_4="${VALIDATOR_ETH_PRIVKEY_4:-4444444444444444444444444444444444444444444444444444444444444444}"
+VALIDATOR_ETH_PRIVKEYS=(
+  "$VALIDATOR_ETH_PRIVKEY_1"
+  "$VALIDATOR_ETH_PRIVKEY_2"
+  "$VALIDATOR_ETH_PRIVKEY_3"
+  "$VALIDATOR_ETH_PRIVKEY_4"
+)
+
 NUM_VALIDATORS=4
 TOTAL_STEPS=12
 
@@ -131,10 +142,12 @@ echo ""
 echo "🔐 Step 3/${TOTAL_STEPS}: Creating operator keys..."
 declare -a VALIDATOR_ADDRS
 for i in $(seq 1 $NUM_VALIDATORS); do
-  # Create key
-  docker run --rm --user root --entrypoint kiichaind \
+  PRIVKEY="${VALIDATOR_ETH_PRIVKEYS[$((i-1))]}"
+
+  # Import deterministic validator operator key so tests can sign Cosmos txs without CLI keyring access
+  echo -e "password123\npassword123" | docker run -i --rm --user root --entrypoint kiichaind \
     -v kii_validator${i}_home:${KII_HOME} \
-    "$IMAGE" keys add validator${i} \
+    "$IMAGE" keys unsafe-import-eth-key validator${i} ${PRIVKEY} \
       --keyring-backend test --home ${KII_HOME} 2>/dev/null || true
 
   # Query address separately
@@ -142,6 +155,12 @@ for i in $(seq 1 $NUM_VALIDATORS); do
     -v kii_validator${i}_home:${KII_HOME} \
     "$IMAGE" keys show validator${i} \
       --keyring-backend test --home ${KII_HOME} -a 2>/dev/null | tr -d '\n\r')
+  if [ -z "$ADDR" ]; then
+    echo "❌ Error: failed to import validator${i} operator key or resolve its address."
+    echo "   The import command was executed non-interactively and produced no address."
+    echo "   Check whether kiichaind changed the behavior of 'keys unsafe-import-eth-key'."
+    exit 1
+  fi
   VALIDATOR_ADDRS+=("$ADDR")
   echo "   ✅ Validator $i: ${ADDR}"
 done
@@ -200,6 +219,8 @@ docker run --rm --user root \
     # Patch denominations across all modules
     jq ".app_state.staking.params.bond_denom = \"akii\" |
         .app_state.staking.params.unbonding_time = \"10s\" |
+        .app_state.slashing.params.signed_blocks_window = \"10\" |
+        .app_state.slashing.params.downtime_jail_duration = \"1m0s\" |
         .app_state.crisis.constant_fee.denom = \"akii\" |
         .app_state.gov.deposit_params.min_deposit[0].denom = \"akii\" |
         .app_state.gov.params.min_deposit[0].denom = \"akii\" |
@@ -234,7 +255,7 @@ docker run --rm --user root \
     ]" $GENESIS > $GENESIS.tmp && \
     mv $GENESIS.tmp $GENESIS
   ' 2>/dev/null
-echo "   ✅ Genesis patched (denom: akii, EVM denom: akii, bank metadata, precompiles activated)"
+echo "   ✅ Genesis patched (denom: akii, EVM denom: akii, signed_blocks_window: 10, downtime_jail_duration: 1m0s, bank metadata, precompiles activated)"
 echo ""
 
 # ----------------------------------------------------------

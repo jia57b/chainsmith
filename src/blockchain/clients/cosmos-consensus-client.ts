@@ -32,6 +32,10 @@ export const COSMOS_API_PATHS = {
     // Mint Module
     MINT_PARAMS: '/mint/params',
 
+    // Auth / Tx
+    AUTH_ACCOUNT: '/auth/accounts',
+    TX_BROADCAST: '/tx/txs',
+
     // Tendermint RPC - always available (no prefix needed)
     TENDERMINT_STATUS: '/status',
     TENDERMINT_BLOCK: '/block',
@@ -143,6 +147,32 @@ export class CosmosConsensusClient implements IConsensusLayerClient {
                 throw new Error(`Connection refused to ${this.restEndpoint}`);
             }
             throw new Error(`Consensus REST request failed: ${error.message}`);
+        }
+    }
+
+    private async makeRestPostRequest(path: string, body: any): Promise<any> {
+        try {
+            const url = `${this.restEndpoint}${path}`;
+            const response = await axios.post(url, body, {
+                timeout: 60000,
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+            });
+            return response.data;
+        } catch (error: any) {
+            console.log(`CosmosConsensusClient REST POST error for ${this.restEndpoint}${path}:`, {
+                code: error.code,
+                message: error.message,
+                status: error.response?.status,
+                statusText: error.response?.statusText,
+                data: error.response?.data,
+            });
+
+            if (error.code === 'ECONNREFUSED') {
+                throw new Error(`Connection refused to ${this.restEndpoint}`);
+            }
+            throw new Error(`Consensus REST POST request failed: ${error.message}`);
         }
     }
 
@@ -296,6 +326,13 @@ export class CosmosConsensusClient implements IConsensusLayerClient {
         return await this.makeRestRequest(path);
     }
 
+    async getSlashingSigningInfo(consAddress: string, customPath?: string): Promise<any> {
+        const path =
+            customPath ??
+            `${this.buildRestPath(COSMOS_API_PATHS.SLASHING_SIGNING_INFOS)}/${encodeURIComponent(consAddress)}`;
+        return await this.makeRestRequest(path);
+    }
+
     // Mint Module APIs - support custom paths
     async getMintParams(customPath?: string): Promise<any> {
         const path = customPath ?? this.buildRestPath(COSMOS_API_PATHS.MINT_PARAMS);
@@ -306,5 +343,19 @@ export class CosmosConsensusClient implements IConsensusLayerClient {
     async getNodeInfo(customPath?: string): Promise<any> {
         const path = customPath ?? this.buildRestPath(COSMOS_API_PATHS.NODE_INFO);
         return await this.makeRestRequest(path);
+    }
+
+    async getAuthAccount(address: string, customPath?: string): Promise<any> {
+        const path =
+            customPath ?? `${this.buildRestPath(COSMOS_API_PATHS.AUTH_ACCOUNT)}/${encodeURIComponent(address)}`;
+        return await this.makeRestRequest(path);
+    }
+
+    async broadcastTx(txBytesBase64: string, mode: string = 'BROADCAST_MODE_SYNC', customPath?: string): Promise<any> {
+        const path = customPath ?? this.buildRestPath(COSMOS_API_PATHS.TX_BROADCAST);
+        return await this.makeRestPostRequest(path, {
+            tx_bytes: txBytesBase64,
+            mode,
+        });
     }
 }

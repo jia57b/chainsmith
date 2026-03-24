@@ -5,6 +5,7 @@ import {
     assertPerformanceResults,
     analyzePerformanceResults,
     PerformanceExpectConfig,
+    getPerformanceRunCount,
 } from '../../src/utils/performance-utils';
 import { RuntimeManager } from '../../src/core/RuntimeManager';
 import { Blockchain } from '../../src/core/Blockchain';
@@ -40,12 +41,13 @@ describe('Performance Tests', () => {
     });
 
     it('Run consecutive performance tests', async () => {
-        // Get totalRuns from environment variable or use default
-        const totalRuns = parseInt(process.env.PERFORMANCE_RUNS || '10');
+        const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        const performanceExpectations: PerformanceExpectConfig = configData.testConfig.performanceExpect;
+        const totalRuns = getPerformanceRunCount(performanceExpectations);
         const results: number[] = [];
 
         console.log(`\n🔄 Running ${totalRuns} consecutive performance tests...`);
-        console.log(`   Configured via: PERFORMANCE_RUNS=${process.env.PERFORMANCE_RUNS || '10'}`);
+        console.log(`   Configured via: testConfig.performanceExpect.tokenTransfer.runs=${totalRuns}`);
 
         for (let i = 1; i <= totalRuns; i++) {
             console.log(`\n--- Run ${i}/${totalRuns} ---`);
@@ -69,9 +71,6 @@ describe('Performance Tests', () => {
             }
         }
 
-        // Read performance expectations from config file
-        const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-        const performanceExpectations: PerformanceExpectConfig = configData.testConfig.performanceExpect;
         logPerformanceExpect(performanceExpectations);
 
         // Analyze performance results

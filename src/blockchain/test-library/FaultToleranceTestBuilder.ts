@@ -4,7 +4,7 @@ import { NodeType, IBlockchainNode } from '../../blockchain/types';
 import { SSHManager, NodeConfig } from '../../infrastructure/nodes';
 import { DockerManager } from '../../infrastructure/docker';
 import { assertConsistentNodeResponses } from '../../utils/test-helpers';
-import { Config } from '../../utils/common';
+import { Config, sleepMs } from '../../utils/common';
 
 /**
  * Fault tolerance test timing configuration
@@ -616,21 +616,132 @@ export class FaultToleranceTestBuilder {
 
         console.log(`   📊 Restart results: ${successfulRestarts}/${this.stoppedValidators.length} successful`);
 
-        // Wait for services to stabilize
-        console.log(`   ⏳ Waiting for services to stabilize...`);
-        await new Promise(resolve => setTimeout(resolve, this.ftConfig.waitTimeForService));
+        const stabilization = await this.waitForServicesToStabilizeAfterRestart();
 
         this.testResults.push({
             step: 'restart_validators',
             success: successfulRestarts === this.stoppedValidators.length,
             successCount: successfulRestarts,
             totalCount: this.stoppedValidators.length,
+            stabilizationDurationMs: stabilization.durationMs,
+            initialHeights: stabilization.initialHeights,
+            stableHeights: stabilization.stableHeights,
             results: restartResults.map(result =>
                 result.status === 'fulfilled' ? result.value : { success: false, error: result.reason }
             ),
         });
 
         return this;
+    }
+
+    /**
+     * Poll the restarted network until block heights resume growth and all active validators align.
+     * waitTimeForService is treated as a maximum timeout rather than a fixed sleep.
+     */
+    private async waitForServicesToStabilizeAfterRestart(): Promise<{
+        durationMs: number;
+        initialHeights: number[];
+        stableHeights: number[];
+    }> {
+        const maxWaitMs = this.ftConfig.waitTimeForService;
+        const pollIntervalMs = Math.max(10, Math.min(3000, Math.floor(this.ftConfig.waitTimeForBlock / 5)));
+        const startedAt = Date.now();
+        const maxWaitSeconds = (maxWaitMs / 1000).toFixed(1);
+        const pollIntervalSeconds = (pollIntervalMs / 1000).toFixed(1);
+
+        console.log(`   ⏳ Waiting for services to stabilize (max ${maxWaitSeconds}s)...`);
+        console.log(`   🔁 Polling block heights every ${pollIntervalSeconds}s until growth resumes and nodes align`);
+
+        let baselineHeights: number[] | null = null;
+        let lastObservedHeights: number[] | null = null;
+        let attempt = 0;
+
+        while (Date.now() - startedAt <= maxWaitMs) {
+            attempt += 1;
+            const elapsedMs = Date.now() - startedAt;
+            const heights = await this.tryGetActiveValidatorBlockHeights();
+
+            if (!heights) {
+                console.log(
+                    `   ⏳ Poll ${attempt}: waiting for all active validators to respond (${elapsedMs}ms elapsed)`
+                );
+                await sleepMs(pollIntervalMs);
+                continue;
+            }
+
+            if (!baselineHeights) {
+                baselineHeights = heights;
+                lastObservedHeights = heights;
+                console.log(`   📦 Poll ${attempt}: baseline heights captured ${JSON.stringify(heights)}`);
+                console.log(`   ⏳ Waiting for resumed growth after restart...`);
+                await sleepMs(pollIntervalMs);
+                continue;
+            }
+
+            lastObservedHeights = heights;
+            const aligned = this.areBlockHeightsAligned(heights);
+            const progressed = this.hasRecoveredGrowth(baselineHeights, heights);
+
+            console.log(
+                `   📦 Poll ${attempt}: heights ${JSON.stringify(heights)} | aligned=${aligned ? 'yes' : 'no'} | progressed=${progressed ? 'yes' : 'no'}`
+            );
+
+            if (aligned && progressed) {
+                const durationMs = Date.now() - startedAt;
+                console.log(`   ✅ Services stabilized after ${durationMs}ms with heights ${JSON.stringify(heights)}`);
+                return {
+                    durationMs,
+                    initialHeights: baselineHeights,
+                    stableHeights: heights,
+                };
+            }
+
+            await sleepMs(pollIntervalMs);
+        }
+
+        throw new Error(
+            `Restarted validators did not stabilize before timeout (${maxWaitMs}ms). Last observed block heights: ${JSON.stringify(
+                lastObservedHeights ?? []
+            )}`
+        );
+    }
+
+    /**
+     * Try to read current block heights from all active validators.
+     * Returns null while any validator is still unavailable.
+     */
+    private async tryGetActiveValidatorBlockHeights(): Promise<number[] | null> {
+        const activeNodes = this.blockchain.getActiveNotBootNodes();
+        const activeNodeIndices = activeNodes.map((node: IBlockchainNode) => node.index);
+
+        try {
+            const responses = await this.blockchain.getMultipleNodeResponses(BLOCK_NUM_REQUEST, activeNodeIndices);
+            const heights = responses.map((result: any) => {
+                const response = result.response ?? result;
+                const rpcResult = response?.result;
+                if (rpcResult === undefined || rpcResult === null) {
+                    throw new Error('Missing block height response');
+                }
+                return parseInt(rpcResult, 16);
+            });
+            return heights;
+        } catch {
+            return null;
+        }
+    }
+
+    private areBlockHeightsAligned(heights: number[]): boolean {
+        return heights.length > 0 && heights.every(height => height === heights[0]);
+    }
+
+    private hasRecoveredGrowth(initialHeights: number[], currentHeights: number[]): boolean {
+        if (initialHeights.length === 0 || currentHeights.length === 0) {
+            return false;
+        }
+
+        const initialMax = Math.max(...initialHeights);
+        const currentMin = Math.min(...currentHeights);
+        return currentMin > initialMax;
     }
 
     /**

@@ -5,8 +5,12 @@
             "fundingMultiplier": 2,
             "precompileAddress": "0x0000000000000000000000000000000000000800"
         },
+        "slashing": {
+            "gasLimit": 200000
+        },
         "performanceExpect": {
             "tokenTransfer": {
+                "runs": 10,
                 "threshold": 10000,
                 "percentage": 90
             }

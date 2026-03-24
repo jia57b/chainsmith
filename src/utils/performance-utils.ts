@@ -3,9 +3,20 @@ import { expect } from 'chai';
 
 export interface PerformanceExpectConfig {
     tokenTransfer: {
+        runs?: number;
         threshold: number;
         percentage: number;
     };
+}
+
+/**
+ * Get configured performance run count.
+ *
+ * Falls back to 10 for backward compatibility when older config files
+ * do not yet define tokenTransfer.runs.
+ */
+export function getPerformanceRunCount(performanceExpectations: PerformanceExpectConfig): number {
+    return performanceExpectations?.tokenTransfer?.runs ?? 10;
 }
 
 /**
