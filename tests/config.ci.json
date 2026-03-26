@@ -96,7 +96,7 @@
     },
     "story-docker": {
         "description": "Story Local Devnet (4 validators + 1 bootnode + 1 RPC)",
-        "supportedCosmosModules": ["staking", "staking_delegation", "slashing"],
+        "supportedCosmosModules": ["staking", "staking_delegation", "slashing", "mint"],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": 1513,
