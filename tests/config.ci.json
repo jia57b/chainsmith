@@ -467,7 +467,7 @@
     },
     "sei-docker": {
         "description": "Sei Local Multi-Validator Devnet (4 validators, CometBFT + Parallelized EVM)",
-        "supportedCosmosModules": ["staking", "staking_delegation", "slashing", "mint"],
+        "supportedCosmosModules": ["staking", "staking_delegation", "slashing"],
         "consensusLayer": "cosmos",
         "executeLayer": "evm",
         "chainId": 713715,
