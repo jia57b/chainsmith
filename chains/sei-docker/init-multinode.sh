@@ -319,6 +319,44 @@ echo "   ✅ Genesis contains ${GENTX_COUNT} validator gentxs"
 echo ""
 
 # ----------------------------------------------------------
+# Step 9b: Inject top-level .validators array into genesis
+# ----------------------------------------------------------
+# Sei's Tendermint fork (sei-tendermint) requires an explicit .validators[]
+# array at the top level of genesis.json, containing each validator's Ed25519
+# pubkey and voting power. Standard collect-gentxs does NOT populate this in
+# Sei — the official localnet uses step3_add_validator_to_genesis.sh for this.
+# Without it, Tendermint has no validator set and consensus stalls at height 1.
+echo "🔑 Step 9b: Injecting .validators array into genesis..."
+
+docker run --rm \
+  -v sei_validator1_home:/home/sei \
+  alpine sh -c '
+    apk add --no-cache jq >/dev/null 2>&1
+    GENESIS=/home/sei/config/genesis.json
+
+    jq ".validators = []" $GENESIS > $GENESIS.tmp && mv $GENESIS.tmp $GENESIS
+
+    IDX=0
+    for GENTX_FILE in /home/sei/config/gentx/*.json; do
+      KEY=$(jq -r ".body.messages[0].pubkey.key" "$GENTX_FILE")
+      DELEGATION=$(jq -r ".body.messages[0].value.amount" "$GENTX_FILE")
+      POWER=$((DELEGATION / 1000000))
+
+      jq --argjson idx "$IDX" \
+         --arg power "$POWER" \
+         --arg key "$KEY" \
+         ".validators[$idx] = {\"power\": \$power, \"pub_key\": {\"type\": \"tendermint/PubKeyEd25519\", \"value\": \$key}}" \
+         $GENESIS > $GENESIS.tmp && mv $GENESIS.tmp $GENESIS
+
+      IDX=$((IDX + 1))
+    done
+
+    echo "   Injected $IDX validators into genesis.validators[]"
+  ' 2>/dev/null
+echo "   ✅ Top-level .validators array written"
+echo ""
+
+# ----------------------------------------------------------
 # Step 10: Configure node settings (RPC, REST, per-node persistent peers)
 # ----------------------------------------------------------
 echo "⚙️  Step 10/${TOTAL_STEPS}: Configuring node settings..."
@@ -365,9 +403,17 @@ for i in $(seq 1 $NUM_VALIDATORS); do
       sed -i \"s|^external-address = \\\"\\\"|external-address = \\\"\$EXT_ADDR\\\"|\" \"\$CONFIG\"
 
       sed -i \"s|laddr = \\\"tcp://127.0.0.1:26657\\\"|laddr = \\\"tcp://0.0.0.0:26657\\\"|\" \"\$CONFIG\"
-      sed -i \"s|timeout_commit = \\\"5s\\\"|timeout_commit = \\\"3s\\\"|\" \"\$CONFIG\"
-      sed -i \"s|timeout_propose = \\\"3s\\\"|timeout_propose = \\\"5s\\\"|\" \"\$CONFIG\"
-      sed -i \"s|^unsafe-propose-timeout-override = \\\"0s\\\"|unsafe-propose-timeout-override = \\\"15s\\\"|\" \"\$CONFIG\"
+
+      # Sei uses unsafe-*-override params (sei-tendermint), matching official localnode config
+      sed -i \"s|^unsafe-propose-timeout-override = .*|unsafe-propose-timeout-override = \\\"3s\\\"|\" \"\$CONFIG\"
+      sed -i \"s|^unsafe-propose-timeout-delta-override = .*|unsafe-propose-timeout-delta-override = \\\"500ms\\\"|\" \"\$CONFIG\"
+      sed -i \"s|^unsafe-vote-timeout-override = .*|unsafe-vote-timeout-override = \\\"50ms\\\"|\" \"\$CONFIG\"
+      sed -i \"s|^unsafe-vote-timeout-delta-override = .*|unsafe-vote-timeout-delta-override = \\\"500ms\\\"|\" \"\$CONFIG\"
+      sed -i \"s|^unsafe-commit-timeout-override = .*|unsafe-commit-timeout-override = \\\"50ms\\\"|\" \"\$CONFIG\"
+
+      # Set node mode to validator (sei-tendermint requires explicit mode)
+      sed -i \"s|^mode = \\\"full\\\"|mode = \\\"validator\\\"|\" \"\$CONFIG\"
+
       sed -i \"s|cors_allowed_origins = \\[\\]|cors_allowed_origins = [\\\"*\\\"]|\" \"\$CONFIG\"
 
       sed -i \"/\\[api\\]/,/\\[/{s|enable = false|enable = true|}\" \"\$APP\"
