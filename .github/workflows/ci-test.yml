@@ -176,7 +176,7 @@ jobs:
                   fi
                   while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
                     ATTEMPT=$((ATTEMPT + 1))
-                    HEIGHT=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                    HEIGHT=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.sync_info.latest_block_height // .result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                     echo "  Attempt $ATTEMPT/$MAX_ATTEMPTS: block height = $HEIGHT"
                     if [ "$HEIGHT" -gt 2 ] 2>/dev/null; then
                       echo "✅ Initial height reached ($HEIGHT), verifying sustained block production..."
@@ -194,7 +194,7 @@ jobs:
                   HEIGHT1=$HEIGHT
                   echo "  Check 1: height = $HEIGHT1, waiting 10s..."
                   sleep 10
-                  HEIGHT2=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  HEIGHT2=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.sync_info.latest_block_height // .result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                   echo "  Check 2: height = $HEIGHT2 (must be > $HEIGHT1)"
                   if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
@@ -204,7 +204,7 @@ jobs:
                   fi
                   echo "  Check 2 passed, waiting 10s..."
                   sleep 10
-                  HEIGHT3=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  HEIGHT3=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.sync_info.latest_block_height // .result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                   echo "  Check 3: height = $HEIGHT3 (must be > $HEIGHT2)"
                   if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
