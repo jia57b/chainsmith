@@ -16,6 +16,7 @@ on:
                     - 0g-docker
                     - story-docker
                     - kava-docker
+                    - evmos-docker
                     - mezo-docker
                     - kii-docker
                     - tac-docker
@@ -93,6 +94,9 @@ jobs:
                     cd /tmp/mezod-src
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t mezo/mezod:latest .
                     echo "mezo/mezod:latest built successfully"
+                  elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
+                    echo "Pulling Evmos Docker image..."
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull tharsishq/evmos:v20.0.0
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "Building kiichain/kiichaind Docker image from source..."
                     git clone --depth 1 --branch v7.0.1 https://github.com/KiiChain/kiichain.git /tmp/kiichain-src
@@ -125,6 +129,9 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
@@ -306,6 +313,9 @@ jobs:
                     echo ""
                     echo "=== Mezo validator-1 logs (last 100 lines) ==="
                     docker compose -f docker-compose.yml logs mezo-validator-1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
+                    echo "=== Evmos validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs evmos-validator1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "=== Kii validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs kii-validator1 --tail=100 2>/dev/null || true
