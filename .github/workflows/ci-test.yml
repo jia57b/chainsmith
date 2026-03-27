@@ -16,11 +16,13 @@ on:
                     - 0g-docker
                     - story-docker
                     - kava-docker
+                    - evmos-docker
                     - mezo-docker
                     - kii-docker
                     - tac-docker
                     - xrplevm-docker
                     - sei-docker
+                    - injective-docker
             tests:
                 description: 'Run tests'
                 required: false
@@ -94,6 +96,9 @@ jobs:
                     cd /tmp/mezod-src
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t mezo/mezod:latest .
                     echo "mezo/mezod:latest built successfully"
+                  elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
+                    echo "Pulling Evmos Docker image..."
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull tharsishq/evmos:v20.0.0
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "Building kiichain/kiichaind Docker image from source..."
                     git clone --depth 1 --branch v7.0.1 https://github.com/KiiChain/kiichain.git /tmp/kiichain-src
@@ -116,6 +121,10 @@ jobs:
                     git submodule update --init --recursive --depth 1 || git submodule update --init --recursive
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t sei-chain:local .
                     echo "sei-chain:local built successfully"
+                  elif [ "${CHAIN_ENV}" = "injective-docker" ]; then
+                    echo "Pulling Injective Docker image..."
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull injectivelabs/injective-core:v1.18.2
+                    echo "injectivelabs/injective-core:v1.18.2 pulled successfully"
                   fi
 
             - name: Initialize multinode localnet
@@ -135,6 +144,9 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "mezo-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
@@ -145,6 +157,7 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "sei-docker" ]; then
+                  elif [ "${CHAIN_ENV}" = "injective-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   fi
@@ -317,6 +330,9 @@ jobs:
                     echo ""
                     echo "=== Mezo validator-1 logs (last 100 lines) ==="
                     docker compose -f docker-compose.yml logs mezo-validator-1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
+                    echo "=== Evmos validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs evmos-validator1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "=== Kii validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs kii-validator1 --tail=100 2>/dev/null || true
@@ -332,6 +348,12 @@ jobs:
                     echo ""
                     echo "=== Sei validator2 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs sei-validator2 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "injective-docker" ]; then
+                    echo "=== Injective validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs inj-validator1 --tail=100 2>/dev/null || true
+                    echo ""
+                    echo "=== Injective validator2 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs inj-validator2 --tail=100 2>/dev/null || true
                   fi
 
             - name: Stop localnet

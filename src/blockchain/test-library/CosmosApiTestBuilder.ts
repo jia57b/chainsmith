@@ -219,7 +219,7 @@ export class CosmosApiTestBuilder {
 
         try {
             const detailResponse = await this.consensusClient.getStakingValidator(operatorAddr);
-            const detail = detailResponse.validator;
+            const detail = this.extractValidatorFromResponse(detailResponse);
             expect(detail).to.have.property('operator_address');
             expect(detail).to.have.property('tokens');
             expect(detail).to.have.property('status');
@@ -354,6 +354,24 @@ export class CosmosApiTestBuilder {
             return response.result.validators;
         }
         return [];
+    }
+
+    /**
+     * Helper method: Extract single validator information from response
+     */
+    private extractValidatorFromResponse(response: any): any {
+        if (response?.code === 200 && response?.msg?.validator) {
+            return response.msg.validator;
+        } else if (response?.code === 200 && response?.msg?.operator_address) {
+            return response.msg;
+        } else if (response?.validator) {
+            return response.validator;
+        } else if (response?.result?.validator) {
+            return response.result.validator;
+        } else if (response?.operator_address) {
+            return response;
+        }
+        return response;
     }
 
     /**
