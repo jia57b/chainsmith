@@ -246,7 +246,7 @@ jobs:
               run: pnpm test:rpc:evm
 
             - name: Test - CometBFT RPC
-              if: inputs.tests == 'all' || inputs.tests == 'rpc:cometbft'
+              if: (inputs.tests == 'all' || inputs.tests == 'rpc:cometbft') && inputs.chain != 'sei-docker'
               continue-on-error: true
               run: pnpm test:rpc:cometbft
 
