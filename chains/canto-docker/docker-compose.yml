@@ -1,0 +1,174 @@
+# docker-compose.yml
+# Canto 4-Validator Localnet for ChainSmith Testing
+#
+# Architecture: Each validator = 1 cantod container (CometBFT + EVM in same process)
+#
+# Usage:
+#   1. Init: ./init-multinode.sh
+#   2. Start: ./start-multinode.sh
+#   3. Check: docker compose --env-file .env.multinode -f docker-compose.yml ps
+#   4. Logs:  docker compose --env-file .env.multinode -f docker-compose.yml logs -f canto-validator1
+#   5. Stop:  ./stop-multinode.sh
+
+services:
+    # ============ Validator 1 ============
+    canto-validator1:
+        image: canto-network/canto:${CANTO_TAG:-local}
+        entrypoint: ['cantod']
+        restart: unless-stopped
+        user: root
+        networks:
+            canto-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cantod
+            --chain-id canto_7700-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "0.0001acanto"
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: canto_validator1_home
+              target: /root/.cantod
+        ports:
+            - '26657:26657' # CometBFT RPC
+            - '1317:1317' # Cosmos REST API
+            - '8545:8545' # EVM JSON-RPC
+            - '8546:8546' # EVM WebSocket
+            - '9090:9090' # gRPC
+            - '26656:26656' # P2P
+
+    # ============ Validator 2 ============
+    canto-validator2:
+        image: canto-network/canto:${CANTO_TAG:-local}
+        entrypoint: ['cantod']
+        restart: unless-stopped
+        user: root
+        networks:
+            canto-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cantod
+            --chain-id canto_7700-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "0.0001acanto"
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: canto_validator2_home
+              target: /root/.cantod
+        ports:
+            - '36657:26657' # CometBFT RPC
+            - '21317:1317' # Cosmos REST API
+            - '28545:8545' # EVM JSON-RPC
+            - '28546:8546' # EVM WebSocket
+            - '36656:26656' # P2P
+
+    # ============ Validator 3 ============
+    canto-validator3:
+        image: canto-network/canto:${CANTO_TAG:-local}
+        entrypoint: ['cantod']
+        restart: unless-stopped
+        user: root
+        networks:
+            canto-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cantod
+            --chain-id canto_7700-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "0.0001acanto"
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: canto_validator3_home
+              target: /root/.cantod
+        ports:
+            - '46657:26657' # CometBFT RPC
+            - '31317:1317' # Cosmos REST API
+            - '38545:8545' # EVM JSON-RPC
+            - '38546:8546' # EVM WebSocket
+            - '46656:26656' # P2P
+
+    # ============ Validator 4 ============
+    canto-validator4:
+        image: canto-network/canto:${CANTO_TAG:-local}
+        entrypoint: ['cantod']
+        restart: unless-stopped
+        user: root
+        networks:
+            canto-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cantod
+            --chain-id canto_7700-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --minimum-gas-prices "0.0001acanto"
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: canto_validator4_home
+              target: /root/.cantod
+        ports:
+            - '56657:26657' # CometBFT RPC
+            - '41317:1317' # Cosmos REST API
+            - '48545:8545' # EVM JSON-RPC
+            - '48546:8546' # EVM WebSocket
+            - '56656:26656' # P2P
+
+volumes:
+    canto_validator1_home:
+        external: true
+        name: canto_validator1_home
+    canto_validator2_home:
+        external: true
+        name: canto_validator2_home
+    canto_validator3_home:
+        external: true
+        name: canto_validator3_home
+    canto_validator4_home:
+        external: true
+        name: canto_validator4_home
+
+networks:
+    canto-multi:
