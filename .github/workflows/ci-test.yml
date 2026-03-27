@@ -104,6 +104,9 @@ jobs:
                     echo "Building Canto Docker image from source..."
                     git clone --depth 1 https://github.com/Canto-Network/Canto.git /tmp/canto-src
                     cd /tmp/canto-src
+                    # Upstream Dockerfile uses deprecated golang:stretch; patch to a maintained base image
+                    sed -i 's/^FROM golang:stretch AS build-env/FROM golang:1.21-bookworm AS build-env/' Dockerfile
+                    sed -i 's/^FROM golang:stretch$/FROM golang:1.21-bookworm/' Dockerfile
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t canto-network/canto:local .
                     echo "canto-network/canto:local built successfully"
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
@@ -167,6 +170,8 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "sei-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "injective-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
