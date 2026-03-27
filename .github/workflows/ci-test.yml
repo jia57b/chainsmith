@@ -21,6 +21,7 @@ on:
                     - kii-docker
                     - tac-docker
                     - xrplevm-docker
+                    - sei-docker
                     - injective-docker
             tests:
                 description: 'Run tests'
@@ -48,7 +49,7 @@ jobs:
     test:
         name: Run Tests (${{ inputs.chain || '0g-docker' }})
         runs-on: ubuntu-latest
-        timeout-minutes: 30
+        timeout-minutes: 45
         env:
             CHAIN_ENV: ${{ inputs.chain || '0g-docker' }}
             TEST_WALLET_PRIVATE_KEY: ${{ secrets.TEST_WALLET_PRIVATE_KEY }}
@@ -113,6 +114,13 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
                     echo "Cloning xrplevm node repository..."
                     git clone --depth 1 https://github.com/xrplevm/node.git node
+                  elif [ "${CHAIN_ENV}" = "sei-docker" ]; then
+                    echo "Building Sei Docker image from source..."
+                    git clone --depth 1 --branch v6.3.3 https://github.com/sei-protocol/sei-chain.git /tmp/sei-chain-src
+                    cd /tmp/sei-chain-src
+                    git submodule update --init --recursive --depth 1 || git submodule update --init --recursive
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t sei-chain:local .
+                    echo "sei-chain:local built successfully"
                   elif [ "${CHAIN_ENV}" = "injective-docker" ]; then
                     echo "Pulling Injective Docker image..."
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull injectivelabs/injective-core:v1.18.2
@@ -148,6 +156,7 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "sei-docker" ]; then
                   elif [ "${CHAIN_ENV}" = "injective-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
@@ -180,7 +189,7 @@ jobs:
                   fi
                   while [ $ATTEMPT -lt $MAX_ATTEMPTS ]; do
                     ATTEMPT=$((ATTEMPT + 1))
-                    HEIGHT=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                    HEIGHT=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.sync_info.latest_block_height // .result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                     echo "  Attempt $ATTEMPT/$MAX_ATTEMPTS: block height = $HEIGHT"
                     if [ "$HEIGHT" -gt 2 ] 2>/dev/null; then
                       echo "✅ Initial height reached ($HEIGHT), verifying sustained block production..."
@@ -198,7 +207,7 @@ jobs:
                   HEIGHT1=$HEIGHT
                   echo "  Check 1: height = $HEIGHT1, waiting 10s..."
                   sleep 10
-                  HEIGHT2=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  HEIGHT2=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.sync_info.latest_block_height // .result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                   echo "  Check 2: height = $HEIGHT2 (must be > $HEIGHT1)"
                   if [ "$HEIGHT2" -le "$HEIGHT1" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT1 -> $HEIGHT2)"
@@ -208,7 +217,7 @@ jobs:
                   fi
                   echo "  Check 2 passed, waiting 10s..."
                   sleep 10
-                  HEIGHT3=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
+                  HEIGHT3=$(curl -s http://localhost:${PORT}/status 2>/dev/null | jq -r '.sync_info.latest_block_height // .result.sync_info.latest_block_height // "0"' 2>/dev/null || echo "0")
                   echo "  Check 3: height = $HEIGHT3 (must be > $HEIGHT2)"
                   if [ "$HEIGHT3" -le "$HEIGHT2" ] 2>/dev/null; then
                     echo "❌ Block height did not increase ($HEIGHT2 -> $HEIGHT3)"
@@ -250,7 +259,7 @@ jobs:
               run: pnpm test:rpc:evm
 
             - name: Test - CometBFT RPC
-              if: inputs.tests == 'all' || inputs.tests == 'rpc:cometbft'
+              if: (inputs.tests == 'all' || inputs.tests == 'rpc:cometbft') && inputs.chain != 'sei-docker'
               continue-on-error: true
               run: pnpm test:rpc:cometbft
 
@@ -333,6 +342,12 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "xrplevm-docker" ]; then
                     echo "=== xrplevm node0 logs (last 100 lines) ==="
                     docker compose logs xrplevm-node-0 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "sei-docker" ]; then
+                    echo "=== Sei validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs sei-validator1 --tail=100 2>/dev/null || true
+                    echo ""
+                    echo "=== Sei validator2 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs sei-validator2 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "injective-docker" ]; then
                     echo "=== Injective validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs inj-validator1 --tail=100 2>/dev/null || true
