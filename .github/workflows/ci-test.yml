@@ -17,6 +17,7 @@ on:
                     - story-docker
                     - kava-docker
                     - evmos-docker
+                    - canto-docker
                     - mezo-docker
                     - kii-docker
                     - tac-docker
@@ -99,6 +100,12 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
                     echo "Pulling Evmos Docker image..."
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull tharsishq/evmos:v20.0.0
+                  elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
+                    echo "Building Canto Docker image from source..."
+                    git clone --depth 1 https://github.com/Canto-Network/Canto.git /tmp/canto-src
+                    cd /tmp/canto-src
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t canto-network/canto:local .
+                    echo "canto-network/canto:local built successfully"
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "Building kiichain/kiichaind Docker image from source..."
                     git clone --depth 1 --branch v7.0.1 https://github.com/KiiChain/kiichain.git /tmp/kiichain-src
@@ -145,6 +152,9 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
@@ -333,6 +343,9 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
                     echo "=== Evmos validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs evmos-validator1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
+                    echo "=== Canto validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs canto-validator1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "=== Kii validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs kii-validator1 --tail=100 2>/dev/null || true

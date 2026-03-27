@@ -321,6 +321,78 @@
             "privateKeySource": "local"
         }
     },
+    "canto-docker": {
+        "description": "Canto Local Multi-Validator Devnet (4 validators)",
+        "supportedCosmosModules": ["staking", "staking_delegation", "slashing"],
+        "consensusLayer": "cosmos",
+        "executeLayer": "evm",
+        "chainId": 7700,
+        "executeLayerHttpRpcUrl": "http://localhost:8545",
+        "consensusLayerRpcUrl": "http://localhost:26657",
+        "consensusLayerHttpRestApiUrl": "http://localhost:1317",
+        "consensusRestApiPathPrefix": "/cosmos",
+        "consensusRestApiVersion": "v1beta1",
+        "executionMethod": "docker",
+        "docker": {
+            "containerPatterns": {
+                "executionLayer": "canto-docker-canto-validator{index}-1",
+                "consensusLayer": "canto-docker-canto-validator{index}-1"
+            },
+            "timeout": 30000
+        },
+        "nodes": [
+            {
+                "index": 1,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 8545,
+                "consensusLayerRpcPort": 26657,
+                "consensusLayerHttpRestApiPort": 1317,
+                "consensusLayerP2pCommPort": 26656
+            },
+            {
+                "index": 2,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 28545,
+                "consensusLayerRpcPort": 36657,
+                "consensusLayerHttpRestApiPort": 21317,
+                "consensusLayerP2pCommPort": 36656
+            },
+            {
+                "index": 3,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 38545,
+                "consensusLayerRpcPort": 46657,
+                "consensusLayerHttpRestApiPort": 31317,
+                "consensusLayerP2pCommPort": 46656
+            },
+            {
+                "index": 4,
+                "url": "http://localhost",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcPort": 48545,
+                "consensusLayerRpcPort": 56657,
+                "consensusLayerHttpRestApiPort": 41317,
+                "consensusLayerP2pCommPort": 56656
+            }
+        ],
+        "founderWallet": {
+            "name": "founder",
+            "address": "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+            "privateKey": "",
+            "privateKeySource": "local"
+        }
+    },
     "mezo-docker": {
         "description": "Mezo Local Multi-Validator Devnet (4 validators, Evmos fork)",
         "supportedCosmosModules": [],
