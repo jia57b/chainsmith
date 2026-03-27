@@ -1,0 +1,178 @@
+# docker-compose.yml
+# Cronos 4-Validator Localnet for ChainSmith Testing
+#
+# Architecture: Each validator = 1 cronosd container (CometBFT + EVM in same process)
+#
+# Usage:
+#   1. Init: ./init-multinode.sh
+#   2. Start: ./start-multinode.sh
+#   3. Check: docker compose --env-file .env.multinode -f docker-compose.yml ps
+#   4. Logs:  docker compose --env-file .env.multinode -f docker-compose.yml logs -f cronos-validator1
+#   5. Stop:  ./stop-multinode.sh
+
+services:
+    cronos-validator1:
+        image: ${CRONOS_IMAGE:-chainsmith/cronosd:local}
+        entrypoint: ['cronosd']
+        restart: unless-stopped
+        user: root
+        networks:
+            cronos-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cronos
+            --chain-id cronos_777-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --rpc.unsafe
+            --api.enable
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --minimum-gas-prices "0basetcro"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: cronos_validator1_home
+              target: /root/.cronos
+        ports:
+            - '26657:26657'
+            - '1317:1317'
+            - '8545:8545'
+            - '8546:8546'
+            - '9090:9090'
+            - '26656:26656'
+
+    cronos-validator2:
+        image: ${CRONOS_IMAGE:-chainsmith/cronosd:local}
+        entrypoint: ['cronosd']
+        restart: unless-stopped
+        user: root
+        networks:
+            cronos-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cronos
+            --chain-id cronos_777-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --rpc.unsafe
+            --api.enable
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --minimum-gas-prices "0basetcro"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: cronos_validator2_home
+              target: /root/.cronos
+        ports:
+            - '36657:26657'
+            - '21317:1317'
+            - '28545:8545'
+            - '28546:8546'
+            - '36656:26656'
+
+    cronos-validator3:
+        image: ${CRONOS_IMAGE:-chainsmith/cronosd:local}
+        entrypoint: ['cronosd']
+        restart: unless-stopped
+        user: root
+        networks:
+            cronos-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cronos
+            --chain-id cronos_777-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --rpc.unsafe
+            --api.enable
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --minimum-gas-prices "0basetcro"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: cronos_validator3_home
+              target: /root/.cronos
+        ports:
+            - '46657:26657'
+            - '31317:1317'
+            - '38545:8545'
+            - '38546:8546'
+            - '46656:26656'
+
+    cronos-validator4:
+        image: ${CRONOS_IMAGE:-chainsmith/cronosd:local}
+        entrypoint: ['cronosd']
+        restart: unless-stopped
+        user: root
+        networks:
+            cronos-multi:
+        env_file:
+            - .env.multinode
+        logging:
+            options:
+                max-size: '12m'
+                max-file: '5'
+        command: >
+            start
+            --home /root/.cronos
+            --chain-id cronos_777-1
+            --p2p.laddr "tcp://0.0.0.0:26656"
+            --p2p.persistent_peers "${PERSISTENT_PEERS}"
+            --rpc.laddr "tcp://0.0.0.0:26657"
+            --rpc.unsafe
+            --api.enable
+            --json-rpc.api "eth,txpool,personal,net,debug,web3"
+            --minimum-gas-prices "0basetcro"
+            --pruning nothing
+            --log_level ${LOG_LEVEL:-info}
+        volumes:
+            - type: volume
+              source: cronos_validator4_home
+              target: /root/.cronos
+        ports:
+            - '56657:26657'
+            - '41317:1317'
+            - '48545:8545'
+            - '48546:8546'
+            - '56656:26656'
+
+volumes:
+    cronos_validator1_home:
+        external: true
+        name: cronos_validator1_home
+    cronos_validator2_home:
+        external: true
+        name: cronos_validator2_home
+    cronos_validator3_home:
+        external: true
+        name: cronos_validator3_home
+    cronos_validator4_home:
+        external: true
+        name: cronos_validator4_home
+
+networks:
+    cronos-multi:
