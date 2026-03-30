@@ -18,6 +18,7 @@ on:
                     - kava-docker
                     - evmos-docker
                     - cronos-docker
+                    - canto-docker
                     - mezo-docker
                     - kii-docker
                     - tac-docker
@@ -99,6 +100,15 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
                     echo "Pulling Evmos Docker image..."
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker pull tharsishq/evmos:v20.0.0
+                  elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
+                    echo "Building Canto Docker image from source..."
+                    git clone --depth 1 https://github.com/Canto-Network/Canto.git /tmp/canto-src
+                    cd /tmp/canto-src
+                    # Upstream Dockerfile uses deprecated golang:stretch; patch to a maintained base image
+                    sed -i 's/^FROM golang:stretch AS build-env/FROM golang:1.21-bookworm AS build-env/' Dockerfile
+                    sed -i 's/^FROM golang:stretch$/FROM golang:1.21-bookworm/' Dockerfile
+                    DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t canto-network/canto:local .
+                    echo "canto-network/canto:local built successfully"
                   elif [ "${CHAIN_ENV}" = "cronos-docker" ]; then
                     echo "Cronos image is built during init step if missing"
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
@@ -136,6 +146,9 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "cronos-docker" ]; then
@@ -323,6 +336,9 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "evmos-docker" ]; then
                     echo "=== Evmos validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs evmos-validator1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
+                    echo "=== Canto validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs canto-validator1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "cronos-docker" ]; then
                     echo "=== Cronos validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs cronos-validator1 --tail=100 2>/dev/null || true
