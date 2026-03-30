@@ -17,6 +17,7 @@ on:
                     - story-docker
                     - kava-docker
                     - evmos-docker
+                    - cronos-docker
                     - canto-docker
                     - mezo-docker
                     - kii-docker
@@ -37,6 +38,7 @@ on:
                     - performance
                     - load:stress
                     - fault-tolerance
+                    - cosmos:api
 # Top-level permissions: minimal read-only
 permissions:
     contents: read
@@ -109,6 +111,8 @@ jobs:
                     sed -i 's/^FROM golang:stretch$/FROM golang:1.21-bookworm/' Dockerfile
                     DOCKER_DEFAULT_PLATFORM=linux/amd64 docker build -t canto-network/canto:local .
                     echo "canto-network/canto:local built successfully"
+                  elif [ "${CHAIN_ENV}" = "cronos-docker" ]; then
+                    echo "Cronos image is built during init step if missing"
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "Building kiichain/kiichaind Docker image from source..."
                     git clone --depth 1 --branch v7.0.1 https://github.com/KiiChain/kiichain.git /tmp/kiichain-src
@@ -158,6 +162,9 @@ jobs:
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
+                    chmod +x init-multinode.sh
+                    ./init-multinode.sh
+                  elif [ "${CHAIN_ENV}" = "cronos-docker" ]; then
                     chmod +x init-multinode.sh
                     ./init-multinode.sh
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
@@ -279,7 +286,7 @@ jobs:
               run: pnpm test:rpc:cometbft
 
             - name: Test - Cosmos API
-              if: inputs.tests == 'all'
+              if: inputs.tests == 'all' || inputs.tests == 'cosmos:api'
               continue-on-error: true
               run: pnpm test:cosmos:api:sample
 
@@ -351,6 +358,9 @@ jobs:
                   elif [ "${CHAIN_ENV}" = "canto-docker" ]; then
                     echo "=== Canto validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs canto-validator1 --tail=100 2>/dev/null || true
+                  elif [ "${CHAIN_ENV}" = "cronos-docker" ]; then
+                    echo "=== Cronos validator1 logs (last 100 lines) ==="
+                    docker compose --env-file .env.multinode -f docker-compose.yml logs cronos-validator1 --tail=100 2>/dev/null || true
                   elif [ "${CHAIN_ENV}" = "kii-docker" ]; then
                     echo "=== Kii validator1 logs (last 100 lines) ==="
                     docker compose --env-file .env.multinode -f docker-compose.yml logs kii-validator1 --tail=100 2>/dev/null || true
