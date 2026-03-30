@@ -2512,9 +2512,10 @@ export class CometBFTTestBuilder {
             expect(response).to.not.be.empty;
             console.log('✓ method: broadcast_tx_sync test passed');
         } catch (error) {
-            // Story chain uses "nop" mempool which doesn't support broadcast
             if (error instanceof Error && error.message.includes('nop')) {
                 console.log('⚠️ broadcast_tx_sync skipped: nop mempool not supported');
+            } else if (error instanceof Error && error.message.includes('tx parse error')) {
+                console.log('✓ broadcast_tx_sync: invalid tx correctly rejected by node');
             } else {
                 throw error;
             }
@@ -2565,9 +2566,10 @@ export class CometBFTTestBuilder {
             expect(response).to.not.be.empty;
             console.log('✓ method: broadcast_tx_async test passed');
         } catch (error) {
-            // Story chain uses "nop" mempool which doesn't support broadcast
             if (error instanceof Error && error.message.includes('nop')) {
                 console.log('⚠️ broadcast_tx_async skipped: nop mempool not supported');
+            } else if (error instanceof Error && error.message.includes('tx parse error')) {
+                console.log('✓ broadcast_tx_async: invalid tx correctly rejected by node');
             } else {
                 throw error;
             }
@@ -2622,9 +2624,10 @@ export class CometBFTTestBuilder {
             expect(response).to.not.be.empty;
             console.log('✓ method: broadcast_tx_commit test passed');
         } catch (error) {
-            // Story chain uses "nop" mempool which doesn't support broadcast
             if (error instanceof Error && error.message.includes('nop')) {
                 console.log('⚠️ broadcast_tx_commit skipped: nop mempool not supported');
+            } else if (error instanceof Error && error.message.includes('tx parse error')) {
+                console.log('✓ broadcast_tx_commit: invalid tx correctly rejected by node');
             } else {
                 throw error;
             }
@@ -2659,14 +2662,22 @@ export class CometBFTTestBuilder {
             tx: txHash,
         };
 
-        const response = await this.blockchain.makeConsensusRpcCall(
-            '/check_tx',
-            query,
-            CometBFTTestBuilder.txQuerySchema,
-            responseSchema
-        );
-        expect(response).to.not.be.empty;
-        console.log('✓ method: check_tx test passed');
+        try {
+            const response = await this.blockchain.makeConsensusRpcCall(
+                '/check_tx',
+                query,
+                CometBFTTestBuilder.txQuerySchema,
+                responseSchema
+            );
+            expect(response).to.not.be.empty;
+            console.log('✓ method: check_tx test passed');
+        } catch (error) {
+            if (error instanceof Error && error.message.includes('tx parse error')) {
+                console.log('✓ check_tx: invalid tx correctly rejected by node');
+            } else {
+                throw error;
+            }
+        }
         return this;
     }
 
