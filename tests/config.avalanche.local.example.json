@@ -1,0 +1,95 @@
+{
+    "testConfig": {
+        "performanceExpect": {
+            "tokenTransfer": {
+                "runs": 10,
+                "threshold": 10000,
+                "percentage": 90
+            }
+        },
+        "faultTolerance": {
+            "waitTimeForBlock": 10000,
+            "waitTimeForService": 45000,
+            "waitTimeLong": 300000,
+            "timeout": 300000
+        }
+    },
+    "avalanche-local": {
+        "description": "Avalanche local L1 example for ChainSmith. Requires Phase 0 endpoint model support for path-based RPC URLs.",
+        "avalancheCliChainName": "chainsmithavalanche",
+        "ecosystem": "avalanche",
+        "supportedCosmosModules": [],
+        "chainType": "evm",
+        "executeLayer": "evm",
+        "consensusLayer": "cosmos",
+        "controlPlane": "avalanche-platform",
+        "validatorManagementType": "Proof Of Authority",
+        "chainId": 9001,
+        "networkId": 1337,
+        "subnetId": "2W9boARgCWL25z6pMFNtkCfNA5v28VGg9PmBgUJfuKndEdhrvw",
+        "blockchainId": "2XXtjxsvVd5LaXa2kjszjNv3zvSTVMuECWW7L5jXsXShFfQTpQ",
+        "executeLayerHttpRpcUrl": "http://127.0.0.1:9654/ext/bc/2XXtjxsvVd5LaXa2kjszjNv3zvSTVMuECWW7L5jXsXShFfQTpQ/rpc",
+        "controlPlaneRpcUrl": "http://127.0.0.1:9654/ext/bc/P",
+        "infoApiUrl": "http://127.0.0.1:9654/ext/info",
+        "healthApiUrl": "http://127.0.0.1:9654/ext/health",
+        "transactionConfirmationStrategy": "receipt-polling",
+        "transactionConfirmationTimeoutMs": 180000,
+        "transactionConfirmationPollIntervalMs": 1000,
+        "executionMethod": "none",
+        "nodes": [
+            {
+                "index": 1,
+                "url": "http://127.0.0.1",
+                "type": "validator",
+                "votingPower": 1,
+                "active": true,
+                "executeLayerHttpRpcUrl": "http://127.0.0.1:9654/ext/bc/2XXtjxsvVd5LaXa2kjszjNv3zvSTVMuECWW7L5jXsXShFfQTpQ/rpc",
+                "controlPlaneRpcUrl": "http://127.0.0.1:9654/ext/bc/P",
+                "infoApiUrl": "http://127.0.0.1:9654/ext/info",
+                "healthApiUrl": "http://127.0.0.1:9654/ext/health",
+                "executeLayerHttpRpcPort": null,
+                "consensusLayerRpcPort": null,
+                "consensusLayerHttpRestApiPort": null,
+                "consensusLayerP2pCommPort": null
+            }
+        ],
+        "founderWallet": {
+            "name": "ewoq",
+            "address": "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC",
+            "privateKey": "0x56289e99c94b6912bfc12adc093c9b51124f0dc54ac7a766b2bc5ccf558d8027",
+            "privateKeySource": "local"
+        },
+        "validatorManagerAddress": "0x0Feedc0de0000000000000000000000000000000",
+        "validatorManagerRpcEndpoint": "http://127.0.0.1:9654/ext/bc/2XXtjxsvVd5LaXa2kjszjNv3zvSTVMuECWW7L5jXsXShFfQTpQ/rpc",
+        "specializedValidatorManagerAddress": "0x100c0De1C0FFEe00000000000000000000000000",
+        "changeOwnerAddress": "P-custom18jma8ppw3nhx5r4ap8clazz0dps7rv5u9xde7p",
+        "validatorManagerOwner": "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC",
+        "proxyContractOwner": "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC",
+        "feePayerPChainAddress": "P-custom18jma8ppw3nhx5r4ap8clazz0dps7rv5u9xde7p",
+        "validatorLifecycle": {
+            "feePayerMode": "stored-key",
+            "feePayerStoredKey": "ewoq",
+            "validatorManagerOwner": "0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC",
+            "defaultBalance": "0.1",
+            "defaultWeight": 20,
+            "removeForce": true,
+            "minRequiredPChainBalance": "0.11",
+            "ghostValidator": {
+                "manifestPath": "chains/avalanche-cli-local/runtime/ghost-validator/ghost-validator-manifest.json",
+                "nodeId": "NodeID-EXAMPLEGHOSTVALIDATOR111111111111111111",
+                "blsPublicKey": "0xEXAMPLEBLSPUBLICKEY",
+                "blsProofOfPossession": "0xEXAMPLEBLSPROOFOFPOSSESSION"
+            },
+            "coldJoinCandidate": {
+                "manifestPath": "chains/avalanche-cli-local/runtime/cold-validator/cold-validator-manifest.json",
+                "nodeId": "NodeID-EXAMPLECOLDJOIN111111111111111111111",
+                "uri": "http://127.0.0.1:9750",
+                "healthApiUrl": "http://127.0.0.1:9750/ext/health",
+                "blsPublicKey": "0xEXAMPLEBLSPUBLICKEY",
+                "blsProofOfPossession": "0xEXAMPLEBLSPROOFOFPOSSESSION",
+                "startCommand": "./chains/avalanche-cli-local/prepare-cold-validator.sh",
+                "stopCommand": "./chains/avalanche-cli-local/cleanup-cold-validator.sh"
+            }
+        }
+    }
+}

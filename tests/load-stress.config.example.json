@@ -9,6 +9,40 @@
             "fundingBatchSize": 50,
             "fundingBatchDelayMs": 200
         },
+        "avalanche-local": {
+            "createNewWallet": true,
+            "fundingAmount": "0.05",
+            "testTransactionAmount": "0.001",
+            "fundingBatchSize": 10,
+            "fundingBatchDelayMs": 300,
+            "testOverrides": {
+                "stress01": {
+                    "sourceWalletCount": 10,
+                    "destWalletCount": 1,
+                    "timeout": 300000
+                },
+                "stress02": {
+                    "sourceWalletCount": 12,
+                    "destWalletCount": 1,
+                    "batchSize": [2, 4, 6],
+                    "timeout": 300000
+                },
+                "stress03": {
+                    "sourceWalletCount": 10,
+                    "destWalletCount": 1,
+                    "gasPricesGwei": [30, 40, 50],
+                    "timeout": 300000
+                },
+                "load01": {
+                    "sourceWalletCount": 10,
+                    "destWalletCount": 1,
+                    "testDuration": 0.25,
+                    "batchSize": 2,
+                    "batchIntervalMs": 1000,
+                    "timeout": 300000
+                }
+            }
+        },
         "testnet": {
             "createNewWallet": false,
             "fundingAmount": "0.1",

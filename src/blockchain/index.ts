@@ -11,6 +11,7 @@ export { BlockchainFactory } from './factory';
 // New client implementations (execute layer / consensus layer separation)
 export { EVMExecuteClient } from './clients/evm-execute-client';
 export { CosmosConsensusClient } from './clients/cosmos-consensus-client';
+export { AvalanchePlatformClient } from './clients/avalanche-platform-client';
 
 // Legacy client implementations (for backward compatibility - to be deprecated)
 // export { EVMClient } from './clients/evm-client';
