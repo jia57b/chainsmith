@@ -293,7 +293,7 @@ jobs:
             - name: Test - Staking
               if: (inputs.tests == 'all' && inputs.chain == 'kii-docker')
               continue-on-error: true
-              run: pnpm test:staking:kii
+              run: pnpm test:staking
 
             - name: Test - Fault Tolerance
               if: inputs.tests == 'all' || inputs.tests == 'fault-tolerance'

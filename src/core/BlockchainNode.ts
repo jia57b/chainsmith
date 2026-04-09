@@ -22,6 +22,12 @@ export class BlockchainNode implements IBlockchainNode {
     readonly name: string = 'Unnamed Node';
     readonly index: number;
     readonly url: string;
+    readonly executeLayerHttpRpcUrl?: string;
+    readonly consensusLayerRpcUrl?: string;
+    readonly consensusLayerHttpRestApiUrl?: string;
+    readonly controlPlaneRpcUrl?: string;
+    readonly infoApiUrl?: string;
+    readonly healthApiUrl?: string;
     readonly type: NodeType;
     private _active: boolean;
     votingPower: number | undefined; // Mutable: validator voting power may be dynamically adjusted
@@ -38,6 +44,12 @@ export class BlockchainNode implements IBlockchainNode {
         this.name = nodeConfig.type + '-' + nodeConfig.index.toString();
         this.index = nodeConfig.index;
         this.url = nodeConfig.url;
+        this.executeLayerHttpRpcUrl = nodeConfig.executeLayerHttpRpcUrl;
+        this.consensusLayerRpcUrl = nodeConfig.consensusLayerRpcUrl;
+        this.consensusLayerHttpRestApiUrl = nodeConfig.consensusLayerHttpRestApiUrl;
+        this.controlPlaneRpcUrl = nodeConfig.controlPlaneRpcUrl;
+        this.infoApiUrl = nodeConfig.infoApiUrl;
+        this.healthApiUrl = nodeConfig.healthApiUrl;
         this.type = nodeConfig.type;
         this._active = nodeConfig.active;
         this.votingPower = nodeConfig.votingPower ?? 0;
@@ -62,11 +74,11 @@ export class BlockchainNode implements IBlockchainNode {
         this.blockchain = blockchainConfig;
 
         if (this._active) {
-            // Only create clients if their ports are exposed (not null)
-            if (this.executeLayerHttpRpcPort !== null) {
+            // Create clients when a full URL override exists, or when legacy ports are exposed
+            if (this.hasExecuteLayerRpcEndpoint()) {
                 this.executeLayerClient = BlockchainFactory.createExecuteLayerClientFromNode(this);
             }
-            if (this.consensusLayerRpcPort !== null && this.consensusLayerHttpRestApiPort !== null) {
+            if (this.hasConsensusRpcAndRestEndpoints()) {
                 this.consensusLayerClient = BlockchainFactory.createConsensusLayerClientFromNode(this);
             }
         }
@@ -104,12 +116,25 @@ export class BlockchainNode implements IBlockchainNode {
      * Only creates clients if their ports are exposed (not null)
      */
     private initializeClients(): void {
-        if (this.executeLayerHttpRpcPort !== null) {
+        if (this.hasExecuteLayerRpcEndpoint()) {
             this.executeLayerClient = BlockchainFactory.createExecuteLayerClientFromNode(this);
         }
-        if (this.consensusLayerRpcPort !== null && this.consensusLayerHttpRestApiPort !== null) {
+        if (this.hasConsensusRpcAndRestEndpoints()) {
             this.consensusLayerClient = BlockchainFactory.createConsensusLayerClientFromNode(this);
         }
+    }
+
+    private hasExecuteLayerRpcEndpoint(): boolean {
+        return Boolean(this.executeLayerHttpRpcUrl) || this.executeLayerHttpRpcPort !== null;
+    }
+
+    private hasConsensusRpcAndRestEndpoints(): boolean {
+        const hasFullRpcUrl = Boolean(this.consensusLayerRpcUrl);
+        const hasFullRestUrl = Boolean(this.consensusLayerHttpRestApiUrl);
+        return (
+            (hasFullRpcUrl && hasFullRestUrl) ||
+            (this.consensusLayerRpcPort !== null && this.consensusLayerHttpRestApiPort !== null)
+        );
     }
 
     /**
@@ -246,11 +271,15 @@ export class BlockchainNode implements IBlockchainNode {
      * Get block height
      */
     async getBlockHeight(): Promise<number> {
-        if (!this.consensusLayerClient) {
-            throw new Error('Consensus layer client not initialized');
+        if (this.consensusLayerClient) {
+            return await this.consensusLayerClient.getBlockHeight();
         }
 
-        return await this.consensusLayerClient.getBlockHeight();
+        if (this.executeLayerClient) {
+            return await this.executeLayerClient.getBlockHeight();
+        }
+
+        throw new Error('Neither consensus layer client nor execute layer client is initialized');
     }
 
     /**
@@ -267,6 +296,9 @@ export class BlockchainNode implements IBlockchainNode {
      * @throws Error if executeLayerHttpRpcPort is null (not exposed)
      */
     getExecuteLayerRpcUrl(): string {
+        if (this.executeLayerHttpRpcUrl) {
+            return this.executeLayerHttpRpcUrl;
+        }
         if (this.executeLayerHttpRpcPort === null) {
             throw new Error(`Execute layer RPC port is not exposed on node ${this.name}`);
         }
@@ -278,6 +310,9 @@ export class BlockchainNode implements IBlockchainNode {
      * @throws Error if consensusLayerRpcPort is null (not exposed)
      */
     getConsensusLayerRpcUrl(): string {
+        if (this.consensusLayerRpcUrl) {
+            return this.consensusLayerRpcUrl;
+        }
         if (this.consensusLayerRpcPort === null) {
             throw new Error(`Consensus layer RPC port is not exposed on node ${this.name}`);
         }
@@ -289,6 +324,9 @@ export class BlockchainNode implements IBlockchainNode {
      * @throws Error if consensusLayerHttpRestApiPort is null (not exposed)
      */
     getConsensusLayerRestUrl(): string {
+        if (this.consensusLayerHttpRestApiUrl) {
+            return this.consensusLayerHttpRestApiUrl;
+        }
         if (this.consensusLayerHttpRestApiPort === null) {
             throw new Error(`Consensus layer REST API port is not exposed on node ${this.name}`);
         }
@@ -301,6 +339,9 @@ export class BlockchainNode implements IBlockchainNode {
     getNetworkConfig(): INetworkConfig {
         return {
             url: this.url,
+            consensusLayerRpcUrl: this.consensusLayerRpcUrl,
+            consensusLayerHttpRestApiUrl: this.consensusLayerHttpRestApiUrl,
+            executeLayerHttpRpcUrl: this.executeLayerHttpRpcUrl,
             consensusLayerRpcPort: this.consensusLayerRpcPort,
             executeLayerHttpRpcPort: this.executeLayerHttpRpcPort,
             consensusLayerHttpRestApiPort: this.consensusLayerHttpRestApiPort,

@@ -17,6 +17,8 @@ export * from './blockchain/factory';
 // New client implementations (execute layer / consensus layer separation)
 export { EVMExecuteClient } from './blockchain/clients/evm-execute-client';
 export { CosmosConsensusClient } from './blockchain/clients/cosmos-consensus-client';
+export { AvalanchePlatformClient } from './blockchain/clients/avalanche-platform-client';
+// export { AvalanchePoSStakingTestBuilder } from './blockchain/test-library/AvalanchePoSStakingTestBuilder';
 
 // Infrastructure management
 export * from './infrastructure/nodes';

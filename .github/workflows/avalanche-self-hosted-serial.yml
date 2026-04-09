@@ -1,0 +1,187 @@
+name: Avalanche Self-Hosted Serial
+
+on:
+    workflow_dispatch:
+        inputs:
+            test_profile:
+                description: 'Which Avalanche suite set to run serially'
+                required: true
+                default: full
+                type: choice
+                options:
+                    - smoke
+                    - extended
+                    - full
+
+permissions:
+    contents: read
+
+concurrency:
+    group: avalanche-self-hosted-serial
+    cancel-in-progress: false
+
+jobs:
+    avalanche-self-hosted:
+        name: Avalanche Serial (${{ inputs.test_profile || 'full' }})
+        runs-on:
+            - self-hosted
+            - linux
+            - x64
+        timeout-minutes: 90
+        env:
+            CHAIN_ENV: avalanche-local
+            AVALANCHE_CHAIN_NAME: chainsmithavalanche
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@v4
+              with:
+                  version: 10
+
+            - name: Setup Python
+              uses: actions/setup-python@v5
+              with:
+                  python-version: '3.11'
+
+            - name: Install dependencies
+              run: pnpm install --frozen-lockfile
+
+            - name: Validate self-hosted prerequisites
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  source chains/avalanche-cli-local/common.sh
+                  CLI_BIN="$(resolve_avalanche_cli)"
+                  AVALANCHEGO_BIN="$(resolve_avalanchego_bin)"
+                  SIG_AGG_BIN="$(resolve_signature_aggregator_bin)"
+                  echo "AVALANCHE_CLI_BIN=${CLI_BIN}" >> "${GITHUB_ENV}"
+                  echo "AVALANCHEGO_BIN=${AVALANCHEGO_BIN}" >> "${GITHUB_ENV}"
+                  echo "SIGNATURE_AGGREGATOR_BIN=${SIG_AGG_BIN}" >> "${GITHUB_ENV}"
+                  echo "✅ Avalanche CLI: ${CLI_BIN}"
+                  echo "✅ AvalancheGo: ${AVALANCHEGO_BIN}"
+                  echo "✅ Signature Aggregator: ${SIG_AGG_BIN}"
+
+            - name: Bootstrap Avalanche definition if missing
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  if [ ! -d "${HOME}/.avalanche-cli/subnets/${AVALANCHE_CHAIN_NAME}" ]; then
+                    echo "ℹ️ Avalanche definition not found; bootstrapping it once on the self-hosted runner."
+                    chmod +x chains/avalanche-cli-local/bootstrap-avalanche-definition.sh
+                    chains/avalanche-cli-local/bootstrap-avalanche-definition.sh --force
+                  else
+                    echo "✅ Reusing existing Avalanche definition at ~/.avalanche-cli/subnets/${AVALANCHE_CHAIN_NAME}"
+                  fi
+
+            - name: Reset prior Avalanche runtime state
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  chmod +x chains/avalanche-cli-local/stop-multinode.sh
+                  chains/avalanche-cli-local/stop-multinode.sh clean || true
+
+            - name: Start Avalanche localnet
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  chmod +x chains/avalanche-cli-local/start-multinode.sh
+                  chains/avalanche-cli-local/start-multinode.sh
+
+            - name: Verify Avalanche environment
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  chmod +x chains/avalanche-cli-local/check-environment.sh
+                  chains/avalanche-cli-local/check-environment.sh
+
+            - name: Refresh Avalanche test config
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  chmod +x chains/avalanche-cli-local/refresh-config.sh
+                  chains/avalanche-cli-local/refresh-config.sh
+
+            - name: Generate load stress config
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  cp tests/load-stress.config.example.json tests/load-stress.config.json
+
+            - name: Generate .env
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  printf 'CHAIN_ENV=%s\n' "${CHAIN_ENV}" > .env
+
+            - name: Run Avalanche platform smoke test
+              run: pnpm test:avalanche:platform
+
+            - name: Run basic smoke test
+              run: pnpm test:basic
+
+            - name: Run EVM RPC smoke test
+              run: pnpm test:rpc:evm
+
+            - name: Run PoA lifecycle test
+              if: inputs.test_profile == 'extended' || inputs.test_profile == 'full'
+              run: pnpm test:avalanche:lifecycle:poa
+
+            - name: Run performance test
+              if: inputs.test_profile == 'extended' || inputs.test_profile == 'full'
+              run: pnpm test:performance
+
+            - name: Run load stress test
+              if: inputs.test_profile == 'extended' || inputs.test_profile == 'full'
+              run: pnpm test:load:stress
+
+            - name: Merge test reports
+              if: always()
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  chmod +x scripts/merge-reports.sh
+                  bash scripts/merge-reports.sh
+
+            - name: Collect Avalanche debug artifacts
+              if: always()
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  mkdir -p artifacts/avalanche
+                  cp -R chains/avalanche-cli-local/output artifacts/avalanche/script-output 2>/dev/null || true
+                  cp -R ~/.avalanche-cli/logs artifacts/avalanche/cli-logs 2>/dev/null || true
+                  cp -R ~/.avalanche-cli/runs/LocalNetwork artifacts/avalanche/localnetwork 2>/dev/null || true
+                  cp -R ~/.avalanche-cli/local/chainsmithavalanche-local-node-local-network artifacts/avalanche/local-cluster 2>/dev/null || true
+                  cp tests/config.avalanche.local.generated.json artifacts/avalanche/config.avalanche.local.generated.json 2>/dev/null || true
+
+            - name: Upload merged report
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: avalanche-self-hosted-report
+                  path: tests/test-report/merged/
+                  retention-days: 14
+
+            - name: Upload Avalanche debug artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: avalanche-self-hosted-debug
+                  path: artifacts/avalanche/
+                  retention-days: 14
+
+            - name: Stop Avalanche localnet
+              if: always()
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  chmod +x chains/avalanche-cli-local/stop-multinode.sh
+                  chains/avalanche-cli-local/stop-multinode.sh clean || true

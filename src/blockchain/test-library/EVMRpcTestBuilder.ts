@@ -3603,14 +3603,23 @@ export class EVMRpcTestBuilder {
             const founderWallet = this.blockchain.createFounderEthersWallet();
             const wallet = founderWallet.connect(rpcProvider);
             const currentNonce = await rpcProvider.getTransactionCount(wallet.address, 'pending');
+            const feeData = await rpcProvider.getFeeData();
 
-            const tx = {
+            const tx: ethers.TransactionRequest = {
                 to: this.account,
                 value: ethers.parseEther('0.01'),
-                gasLimit: 21000,
-                gasPrice: ethers.parseUnits('20', 'gwei'),
+                gasLimit: 21000n,
                 nonce: currentNonce,
             };
+
+            // Match the chain's current fee model instead of hardcoding legacy gas pricing.
+            if (feeData.maxFeePerGas && feeData.maxPriorityFeePerGas) {
+                tx.type = 2;
+                tx.maxFeePerGas = feeData.maxFeePerGas;
+                tx.maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+            } else {
+                tx.gasPrice = feeData.gasPrice ?? ethers.parseUnits('20', 'gwei');
+            }
 
             const signedTx = await this.blockchain.signTransaction(tx, this.blockchain.founderWallet?.privateKey ?? '');
 
@@ -3622,14 +3631,26 @@ export class EVMRpcTestBuilder {
             };
 
             const response = await this.blockchain.makeRpcCall(request, requestSchema, responseSchema, this.nodeIndex);
-            const txHash = response.result;
+            const rpcResponse = response as any;
+            const txHash = rpcResponse.result as string | undefined;
             console.log(`Transaction hash: ${txHash}`);
 
-            // Wait for the transaction to be mined
-            const currentBlock = await this.blockchain.getBlockHeight();
-            await this.blockchain.waitForBlockNumber(currentBlock + 1);
+            if (!txHash) {
+                const rpcErrorMessage = rpcResponse.error
+                    ? JSON.stringify(rpcResponse.error)
+                    : 'RPC returned no transaction hash';
+                throw new Error(rpcErrorMessage);
+            }
+
+            // Wait for the specific transaction receipt instead of waiting for an arbitrary next block.
+            // This avoids hanging on chains that do not continuously produce empty blocks.
+            const receipt = await this.blockchain.waitForTransaction(txHash, 30000);
+            if (!receipt) {
+                throw new Error(`Timed out waiting for transaction receipt: ${txHash}`);
+            }
 
             expect(response).to.not.be.empty;
+            expect(txHash).to.match(/^0x[a-fA-F\d]{64}$/);
             console.log('✓ eth_sendRawTransaction test passed');
         } catch (error) {
             console.log('⚠ eth_sendRawTransaction test failed:', (error as Error).message);

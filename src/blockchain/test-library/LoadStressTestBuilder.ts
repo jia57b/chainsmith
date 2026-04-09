@@ -166,7 +166,7 @@ export class LoadStressTestBuilder {
             await this.prepareExistingWallets(count, needsFunding, FUNDING_AMOUNT, fundingTransactions);
         }
 
-        // Wait for all funding transactions to be confirmed
+        // Wait for all funding transactions to be confirmed using direct receipt polling.
         await this.blockchain.waitForTransactionConfirmations(fundingTransactions);
 
         console.log(`✅ Prepared ${this.wallets.length} wallets`);
@@ -568,7 +568,6 @@ export class LoadStressTestBuilder {
 
         this.startTime = Date.now();
         const allResults: any[] = [];
-        const provider = this.getProvider();
 
         for (const gasPrice of gasPrices) {
             console.log(`\n   --- Testing gas price: ${ethers.formatUnits(gasPrice, 'gwei')} Gwei ---`);
@@ -613,24 +612,24 @@ export class LoadStressTestBuilder {
             const gasSubmissionEndTime = Date.now();
             const submissionDuration = gasSubmissionEndTime - gasStartTime;
 
-            const successfulTxs = gasResults.filter(result => result.success);
+            const successfulTxs: any[] = gasResults.filter(result => result.success);
             const submissionRate = (successfulTxs.length / (submissionDuration / 1000)).toFixed(2);
 
             // Wait for on-chain confirmations for this gas price round
             console.log(`   ⏳ Waiting for ${successfulTxs.length} transactions to confirm...`);
-            const confirmPromises = successfulTxs.map(async (result: any) => {
-                try {
-                    const receipt = await provider.waitForTransaction(result.hash, 1, 60000);
-                    if (receipt) {
-                        result.blockNumber = receipt.blockNumber;
-                        result.confirmationTime = Date.now();
-                        result.gasUsed = receipt.gasUsed?.toString();
-                    }
-                } catch {
-                    // Receipt timeout - transaction may still confirm later
+            const confirmationResults = await this.blockchain.waitForTransactionConfirmations(
+                successfulTxs.map((result: any, index: number) => ({
+                    tx: { hash: result.hash },
+                    index: index + 1,
+                }))
+            );
+
+            confirmationResults.forEach((confirmation, index) => {
+                if (confirmation.success && confirmation.blockNumber) {
+                    successfulTxs[index].blockNumber = confirmation.blockNumber;
+                    successfulTxs[index].confirmationTime = Date.now();
                 }
             });
-            await Promise.all(confirmPromises);
             const gasConfirmEndTime = Date.now();
             const totalGasDuration = gasConfirmEndTime - gasStartTime;
 
@@ -808,24 +807,21 @@ export class LoadStressTestBuilder {
         }
 
         console.log(`\n   ⏳ Waiting for ${successfulTxs.length} transactions to be confirmed on-chain...`);
-        const provider = this.getProvider();
         const confirmStartTime = Date.now();
+        const confirmationResults = await this.blockchain.waitForTransactionConfirmations(
+            successfulTxs.map((result, index) => ({
+                tx: { hash: result.hash },
+                index: index + 1,
+            }))
+        );
+        this.confirmationEndTime = Date.now();
 
-        const confirmationPromises = successfulTxs.map(async result => {
-            try {
-                const receipt = await provider.waitForTransaction(result.hash, 1, 60000);
-                if (receipt) {
-                    result.blockNumber = receipt.blockNumber;
-                    result.confirmationTime = Date.now();
-                    result.gasUsed = receipt.gasUsed?.toString();
-                }
-            } catch (error) {
-                console.warn(`   ⚠️ Failed to get receipt for ${result.hash}: ${error}`);
+        confirmationResults.forEach((confirmation, index) => {
+            if (confirmation.success && confirmation.blockNumber) {
+                successfulTxs[index].blockNumber = confirmation.blockNumber;
+                successfulTxs[index].confirmationTime = Date.now();
             }
         });
-
-        await Promise.all(confirmationPromises);
-        this.confirmationEndTime = Date.now();
 
         const confirmedCount = successfulTxs.filter(r => r.blockNumber).length;
         const confirmDuration = this.confirmationEndTime - confirmStartTime;

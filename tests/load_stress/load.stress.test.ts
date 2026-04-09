@@ -22,6 +22,20 @@ interface LoadStressTestConfig {
             fundingBatchSize?: number;
             fundingBatchDelayMs?: number;
             wallets?: { privateKey: string }[];
+            walletEnvPrefix?: string;
+            walletCount?: number;
+            testOverrides?: {
+                [key: string]: Partial<{
+                    sourceWalletCount: number;
+                    destWalletCount: number;
+                    timeout: number;
+                    batchSize: number | number[];
+                    batchIntervalMs: number;
+                    gasPricesGwei: number[];
+                    testDuration: number;
+                    targetTPS: number;
+                }>;
+            };
         };
     };
     tests: {
@@ -70,14 +84,20 @@ function getTestConfigFor(testName: string) {
         throw new Error(`Test configuration not found for: ${testName}`);
     }
 
+    const envTestOverride = config.environments[envName]?.testOverrides?.[testName] || {};
+    const mergedTestConfig = {
+        ...testConfig,
+        ...envTestOverride,
+    };
+
     // Convert gasPricesGwei to wei (bigint)
     let gasPrices: bigint[] | undefined;
-    if (testConfig.gasPricesGwei) {
-        gasPrices = testConfig.gasPricesGwei.map(gwei => ethers.parseUnits(gwei.toString(), 'gwei'));
+    if (mergedTestConfig.gasPricesGwei) {
+        gasPrices = mergedTestConfig.gasPricesGwei.map(gwei => ethers.parseUnits(gwei.toString(), 'gwei'));
     }
 
     return {
-        ...testConfig,
+        ...mergedTestConfig,
         gasPrices,
     };
 }
