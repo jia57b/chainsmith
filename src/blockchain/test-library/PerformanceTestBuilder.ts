@@ -1,10 +1,19 @@
 import { Config } from '../../utils/common';
 import { Blockchain } from '../../core/Blockchain';
 
+export interface PerformanceRunMetrics {
+    submissionLatencyMs: number;
+    confirmationLatencyMs: number;
+    endToEndLatencyMs: number;
+    transactionHash: string;
+    blockNumber: number;
+}
+
 // Performance Test Builder
 export class PerformanceTestBuilder {
     private blockchain: Blockchain;
     private timeTaken: number = 0;
+    private metrics: PerformanceRunMetrics | null = null;
 
     constructor(blockchain: Blockchain) {
         this.blockchain = blockchain;
@@ -31,20 +40,31 @@ export class PerformanceTestBuilder {
                 '0.1',
                 privateKey
             );
+            const submittedAt = Date.now();
 
             if (!transaction.hash) {
                 throw new Error('Transaction hash was not returned');
             }
 
             const receipt = await this.blockchain.waitForTransaction(transaction.hash);
+            const confirmedAt = Date.now();
             if (!receipt || receipt.status !== 1) {
                 throw new Error('Transaction was not confirmed on-chain');
             }
 
-            const endTime = Date.now();
-            this.timeTaken = endTime - startTime;
+            this.metrics = {
+                submissionLatencyMs: submittedAt - startTime,
+                confirmationLatencyMs: confirmedAt - submittedAt,
+                endToEndLatencyMs: confirmedAt - startTime,
+                transactionHash: transaction.hash,
+                blockNumber: receipt.blockNumber,
+            };
+            this.timeTaken = this.metrics.endToEndLatencyMs;
 
-            console.log(`Transaction completed in ${this.timeTaken}ms`);
+            console.log(
+                `Transaction completed in ${this.timeTaken}ms ` +
+                    `(submission=${this.metrics.submissionLatencyMs}ms, confirmation=${this.metrics.confirmationLatencyMs}ms)`
+            );
         } catch (error) {
             console.error('Transaction failed:', error);
             throw error;
@@ -60,5 +80,12 @@ export class PerformanceTestBuilder {
      */
     getTimeTaken(): number {
         return this.timeTaken;
+    }
+
+    /**
+     * Get structured performance metrics for the latest run.
+     */
+    getMetrics(): PerformanceRunMetrics | null {
+        return this.metrics;
     }
 }

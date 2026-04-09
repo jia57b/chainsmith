@@ -26,6 +26,8 @@ export class Blockchain implements IBlockchain {
     readonly executeLayer: BlockchainType;
     readonly consensusLayer: BlockchainType;
     readonly chainType: BlockchainType;
+    readonly ecosystem?: string;
+    readonly controlPlane?: string;
     readonly nativeToken?: string;
     readonly addressPrefix?: string;
 
@@ -33,6 +35,12 @@ export class Blockchain implements IBlockchain {
     readonly executeLayerHttpRpcUrl: string;
     readonly consensusLayerRpcUrl?: string;
     readonly consensusLayerHttpRestApiUrl?: string;
+    readonly controlPlaneRpcUrl?: string;
+    readonly infoApiUrl?: string;
+    readonly healthApiUrl?: string;
+    readonly transactionConfirmationStrategy?: 'provider-wait' | 'receipt-polling';
+    readonly transactionConfirmationTimeoutMs?: number;
+    readonly transactionConfirmationPollIntervalMs?: number;
 
     // IRuntimeTestConfig properties - mutable, test configuration may need dynamic adjustment
     public timeout?: number;
@@ -59,6 +67,8 @@ export class Blockchain implements IBlockchain {
         this.consensusLayer = blockchainConfig.consensusLayer;
         // chainType defaults to executeLayer (execution layer type typically represents the main chain type)
         this.chainType = blockchainConfig.chainType ?? blockchainConfig.executeLayer;
+        this.ecosystem = blockchainConfig.ecosystem;
+        this.controlPlane = blockchainConfig.controlPlane;
         this.nativeToken = blockchainConfig.nativeToken;
         this.addressPrefix = blockchainConfig.addressPrefix;
 
@@ -66,6 +76,12 @@ export class Blockchain implements IBlockchain {
         this.executeLayerHttpRpcUrl = blockchainConfig.executeLayerHttpRpcUrl;
         this.consensusLayerRpcUrl = blockchainConfig.consensusLayerRpcUrl;
         this.consensusLayerHttpRestApiUrl = blockchainConfig.consensusLayerHttpRestApiUrl;
+        this.controlPlaneRpcUrl = blockchainConfig.controlPlaneRpcUrl;
+        this.infoApiUrl = blockchainConfig.infoApiUrl;
+        this.healthApiUrl = blockchainConfig.healthApiUrl;
+        this.transactionConfirmationStrategy = blockchainConfig.transactionConfirmationStrategy;
+        this.transactionConfirmationTimeoutMs = blockchainConfig.transactionConfirmationTimeoutMs;
+        this.transactionConfirmationPollIntervalMs = blockchainConfig.transactionConfirmationPollIntervalMs;
 
         // Initialize timeout from config
         this.timeout = blockchainConfig.timeout;
@@ -278,7 +294,17 @@ export class Blockchain implements IBlockchain {
 
         try {
             const provider = this.getDefaultExecuteLayerClient().getProvider();
-            const receipt = await provider.waitForTransaction(txHash, 1, timeout);
+            const strategy = this.transactionConfirmationStrategy ?? 'provider-wait';
+            const effectiveTimeout = this.transactionConfirmationTimeoutMs ?? timeout;
+            const receipt =
+                strategy === 'receipt-polling'
+                    ? await this.pollTransactionReceipt(
+                          provider,
+                          txHash,
+                          effectiveTimeout,
+                          this.transactionConfirmationPollIntervalMs
+                      )
+                    : await provider.waitForTransaction(txHash, 1, effectiveTimeout);
             if (receipt) {
                 return {
                     blockHash: receipt.blockHash,
@@ -368,8 +394,22 @@ export class Blockchain implements IBlockchain {
      */
     async getBlockHeight(nodeIndex?: number): Promise<number> {
         const node = nodeIndex !== undefined ? this.getNode(nodeIndex) : this.getActiveNotBootNodes()[0];
-
-        return await node.getBlockHeight();
+        try {
+            return await node.getBlockHeight();
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            if (
+                message.includes('Consensus layer client') ||
+                message.includes('Neither consensus layer client nor execute layer client')
+            ) {
+                const executeClient = node.getExecuteLayerClient();
+                if (!executeClient) {
+                    throw error;
+                }
+                return await executeClient.getBlockHeight();
+            }
+            throw error;
+        }
     }
 
     /**
@@ -859,7 +899,7 @@ export class Blockchain implements IBlockchain {
      */
     async waitForTransactionConfirmations(
         transactions: Array<{ tx: { hash: string }; index: number }>,
-        timeout: number = 60000
+        timeout: number = 180000
     ): Promise<Array<{ success: boolean; index: number; blockNumber?: number; error?: any }>> {
         if (transactions.length === 0) {
             return [];
@@ -868,9 +908,19 @@ export class Blockchain implements IBlockchain {
         console.log(`   ⏳ Waiting for ${transactions.length} transactions to be confirmed...`);
 
         const provider = this.getDefaultExecuteLayerClient().getProvider();
+        const strategy = this.transactionConfirmationStrategy ?? 'provider-wait';
+        const effectiveTimeout = this.transactionConfirmationTimeoutMs ?? timeout;
         const confirmationPromises = transactions.map(async funding => {
             try {
-                const receipt = await provider.waitForTransaction(funding.tx.hash, 1, timeout);
+                const receipt =
+                    strategy === 'receipt-polling'
+                        ? await this.pollTransactionReceipt(
+                              provider,
+                              funding.tx.hash,
+                              effectiveTimeout,
+                              this.transactionConfirmationPollIntervalMs
+                          )
+                        : await provider.waitForTransaction(funding.tx.hash, 1, effectiveTimeout);
                 console.log(`   ✅ Transaction ${funding.index} confirmed in block: ${receipt?.blockNumber}`);
                 return {
                     success: true,
@@ -888,6 +938,25 @@ export class Blockchain implements IBlockchain {
         console.log(`   ✅ ${successCount}/${transactions.length} transactions confirmed`);
 
         return results;
+    }
+
+    private async pollTransactionReceipt(
+        provider: ethers.JsonRpcProvider,
+        txHash: string,
+        timeoutMs: number,
+        pollIntervalMs: number = 1000
+    ): Promise<ethers.TransactionReceipt | null> {
+        const deadline = Date.now() + timeoutMs;
+
+        while (Date.now() < deadline) {
+            const receipt = await provider.getTransactionReceipt(txHash);
+            if (receipt) {
+                return receipt;
+            }
+            await sleepMs(pollIntervalMs);
+        }
+
+        return null;
     }
 
     /**

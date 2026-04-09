@@ -18,6 +18,7 @@ export enum BlockchainType {
 
 // Execution method for node operations (start/stop)
 export type ExecutionMethod = 'ssh' | 'docker' | 'none';
+export type TransactionConfirmationStrategy = 'provider-wait' | 'receipt-polling';
 
 export type { EnvironmentSSHConfig, NodeSSHConfig, EnvironmentDockerConfig, NodeDockerConfig };
 
@@ -34,6 +35,13 @@ export enum PrivateKeySource {
 
 export interface INetworkConfig {
     url: string;
+    // Full URLs take precedence over host+port derivation when provided
+    executeLayerHttpRpcUrl?: string;
+    consensusLayerRpcUrl?: string;
+    consensusLayerHttpRestApiUrl?: string;
+    controlPlaneRpcUrl?: string;
+    infoApiUrl?: string;
+    healthApiUrl?: string;
     // Ports can be: number (exposed), null (explicitly not exposed), undefined (use default)
     executeLayerHttpRpcPort?: number | null;
     consensusLayerHttpRestApiPort?: number | null;
@@ -51,6 +59,8 @@ export interface IBlockchainMeta {
     chainType: BlockchainType; // type == executeLayer for now
     executeLayer: BlockchainType;
     consensusLayer: BlockchainType;
+    ecosystem?: string;
+    controlPlane?: string;
     nativeToken?: string;
     addressPrefix?: string;
 }
@@ -60,6 +70,12 @@ export interface IBaseBlockchain extends IBlockchainMeta, IRuntimeTestConfig {
     executeLayerHttpRpcUrl: string;
     consensusLayerRpcUrl?: string;
     consensusLayerHttpRestApiUrl?: string;
+    controlPlaneRpcUrl?: string;
+    infoApiUrl?: string;
+    healthApiUrl?: string;
+    transactionConfirmationStrategy?: TransactionConfirmationStrategy;
+    transactionConfirmationTimeoutMs?: number;
+    transactionConfirmationPollIntervalMs?: number;
     // REST API path prefix for Cosmos SDK compatibility (e.g., '/cosmos' for evmos, '' for story)
     consensusRestApiPathPrefix?: string;
     // REST API version for Cosmos SDK (e.g., 'v1beta1' for standard Cosmos, '' for simplified paths)
@@ -303,6 +319,25 @@ export interface IConsensusLayerClient {
     // Auth / Tx APIs
     getAuthAccount(address: string, customPath?: string): Promise<any>;
     broadcastTx(txBytesBase64: string, mode?: string, customPath?: string): Promise<any>;
+}
+
+/**
+ * Control plane client interface - handles platform/network-level metadata and health.
+ * This is intentionally smaller than IConsensusLayerClient because not every ecosystem
+ * exposes Cosmos/CometBFT-style consensus APIs.
+ */
+export interface IControlPlaneClient {
+    readonly config: IClientConfig;
+    readonly rpcEndpoint?: string;
+    readonly infoEndpoint?: string;
+    readonly healthEndpoint?: string;
+
+    isConnected(): Promise<boolean>;
+    connect(): Promise<void>;
+    disconnect(): Promise<void>;
+
+    getNetworkInfo(): Promise<NetworkInfo>;
+    getValidators(...args: any[]): Promise<ValidatorInfo[]>;
 }
 
 /**

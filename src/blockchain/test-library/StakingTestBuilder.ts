@@ -9,9 +9,14 @@ const DEFAULT_PRECOMPILE_ABI = [
     'function delegate(address delegatorAddress, string validatorAddress, uint256 amount) external returns (bool success)',
     'function undelegate(address delegatorAddress, string validatorAddress, uint256 amount) external returns (int64 completionTime)',
     'function redelegate(address delegatorAddress, string validatorSrcAddress, string validatorDstAddress, uint256 amount) external returns (int64 completionTime)',
+    'function cancelUnbondingDelegation(address delegatorAddress, string validatorAddress, uint256 amount, uint256 creationHeight) external returns (bool success)',
     'function delegation(address delegatorAddress, string validatorAddress) external view returns (uint256 shares, tuple(string denom, uint256 amount) balance)',
     'function unbondingDelegation(address delegatorAddress, string validatorAddress) external view returns (tuple(string delegatorAddress, string validatorAddress, tuple(int64 creationHeight, int64 completionTime, uint256 initialBalance, uint256 balance, uint64 unbondingId, int64 unbondingOnHoldRefCount)[] entries) unbondingDelegation)',
     'function validator(address validatorAddress) external view returns (tuple(string operatorAddress, string consensusPubkey, bool jailed, uint8 status, uint256 tokens, uint256 delegatorShares, string description, int64 unbondingHeight, int64 unbondingTime, uint256 commission, uint256 minSelfDelegation) validator)',
+    'event Delegate(address indexed delegatorAddress, address indexed validatorAddress, uint256 amount, uint256 newShares)',
+    'event Unbond(address indexed delegatorAddress, address indexed validatorAddress, uint256 amount, uint256 completionTime)',
+    'event Redelegate(address indexed delegatorAddress, address indexed validatorSrcAddress, address indexed validatorDstAddress, uint256 amount, uint256 completionTime)',
+    'event CancelUnbondingDelegation(address indexed delegatorAddress, address indexed validatorAddress, uint256 amount, uint256 creationHeight)',
 ];
 
 /**
@@ -378,6 +383,10 @@ export class StakingTestBuilder {
 
     private getStakingContract(wallet: ethers.Wallet): ethers.Contract {
         return new ethers.Contract(this.precompileAddress, this.precompileAbi, wallet);
+    }
+
+    private getStakingInterface(): ethers.Interface {
+        return new ethers.Interface(this.precompileAbi);
     }
 
     private async performStakingDelegation(wallet: any, amount: string): Promise<any> {
@@ -752,6 +761,49 @@ export class StakingTestBuilder {
     }
 
     /**
+     * Cancel an unbonding delegation entry using its creation height.
+     */
+    async cancelUnbondingDelegationFrom(
+        wallet: ethers.Wallet,
+        amount: string,
+        creationHeight: bigint | number | string,
+        validatorAddr?: string
+    ): Promise<any> {
+        const target = validatorAddr ?? this.validatorAddress;
+        if (!target) {
+            throw new Error('Validator address required');
+        }
+
+        const contract = this.getStakingContract(wallet);
+        const amountWei = ethers.parseEther(amount);
+        const normalizedCreationHeight = BigInt(creationHeight.toString());
+
+        console.log(
+            `   Precompile cancelUnbondingDelegation: delegator=${wallet.address}, validator=${target}, amount=${amountWei.toString()}, creationHeight=${normalizedCreationHeight.toString()}`
+        );
+
+        const tx = await contract.cancelUnbondingDelegation(
+            wallet.address,
+            target,
+            amountWei,
+            normalizedCreationHeight,
+            {
+                gasLimit: 500000,
+            }
+        );
+
+        const receipt = await tx.wait();
+        if (!receipt || receipt.status !== 1) {
+            throw new Error(`Cancel unbonding tx reverted (status=${receipt?.status})`);
+        }
+
+        console.log(
+            `   Cancel unbonding tx confirmed in block ${receipt.blockNumber}, gas used: ${receipt.gasUsed.toString()}`
+        );
+        return receipt;
+    }
+
+    /**
      * Query unbonding delegation info via precompile view function.
      */
     async queryUnbondingDelegation(delegatorAddress: string, validatorAddr?: string): Promise<any | null> {
@@ -833,6 +885,28 @@ export class StakingTestBuilder {
      */
     getBlockchain(): Blockchain {
         return this.blockchain;
+    }
+
+    /**
+     * Decode staking-related precompile logs from a transaction receipt.
+     */
+    decodeStakingEvents(receipt: any): Array<{ name: string; args: any; log: any }> {
+        const iface = this.getStakingInterface();
+        const stakingLogs = receipt.logs.filter(
+            (log: any) => log.address?.toLowerCase() === this.precompileAddress.toLowerCase()
+        );
+
+        const parsed: Array<{ name: string; args: any; log: any }> = [];
+        for (const log of stakingLogs) {
+            try {
+                const decoded = iface.parseLog(log);
+                parsed.push({ name: decoded?.name ?? 'unknown', args: decoded?.args, log });
+            } catch {
+                // Ignore logs not decodable by the staking ABI.
+            }
+        }
+
+        return parsed;
     }
 
     // ========================================================================

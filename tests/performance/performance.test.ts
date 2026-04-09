@@ -9,7 +9,7 @@ import {
 } from '../../src/utils/performance-utils';
 import { RuntimeManager } from '../../src/core/RuntimeManager';
 import { Blockchain } from '../../src/core/Blockchain';
-import { PerformanceTestBuilder } from '../../src/blockchain/test-library';
+import { PerformanceRunMetrics, PerformanceTestBuilder } from '../../src/blockchain/test-library';
 import { Config } from '../../src/utils/common';
 import path from 'path';
 import fs from 'fs';
@@ -44,7 +44,7 @@ describe('Performance Tests', () => {
         const configData = JSON.parse(fs.readFileSync(configPath, 'utf8'));
         const performanceExpectations: PerformanceExpectConfig = configData.testConfig.performanceExpect;
         const totalRuns = getPerformanceRunCount(performanceExpectations);
-        const results: number[] = [];
+        const results: Array<PerformanceRunMetrics | null> = [];
 
         console.log(`\n🔄 Running ${totalRuns} consecutive performance tests...`);
         console.log(`   Configured via: testConfig.performanceExpect.tokenTransfer.runs=${totalRuns}`);
@@ -56,13 +56,17 @@ describe('Performance Tests', () => {
                 const builder = new PerformanceTestBuilder(blockchain);
                 await builder.executeTokenTransfer();
 
-                const timeTaken = builder.getTimeTaken();
-                results.push(timeTaken);
+                const metrics = builder.getMetrics();
+                results.push(metrics);
 
-                console.log(`✅ Run ${i} completed: ${timeTaken}ms`);
+                console.log(
+                    `✅ Run ${i} completed: ${builder.getTimeTaken()}ms ` +
+                        `(submission=${metrics?.submissionLatencyMs ?? 'n/a'}ms, ` +
+                        `confirmation=${metrics?.confirmationLatencyMs ?? 'n/a'}ms)`
+                );
             } catch (error) {
                 console.error(`❌ Run ${i} failed:`, error);
-                results.push(-1); // Mark as failed
+                results.push(null); // Mark as failed
             }
 
             // Add a small delay between runs to avoid rate limiting
