@@ -122,12 +122,15 @@ jobs:
                   printf 'CHAIN_ENV=%s\n' "${CHAIN_ENV}" > .env
 
             - name: Run Avalanche platform smoke test
+              if: inputs.test_profile == 'smoke' || inputs.test_profile == 'full'
               run: pnpm test:avalanche:platform
 
             - name: Run basic smoke test
+              if: inputs.test_profile == 'smoke' || inputs.test_profile == 'full'
               run: pnpm test:basic
 
             - name: Run EVM RPC smoke test
+              if: inputs.test_profile == 'smoke' || inputs.test_profile == 'full'
               run: pnpm test:rpc:evm
 
             - name: Run PoA lifecycle test
