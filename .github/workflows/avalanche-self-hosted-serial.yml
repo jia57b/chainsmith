@@ -1,10 +1,10 @@
-name: Avalanche Self-Hosted Serial
+name: ChainSmith CI Tests for Avalanche
 
 on:
     workflow_dispatch:
         inputs:
             test_profile:
-                description: 'Which Avalanche suite set to run serially'
+                description: 'Which Avalanche tests to run'
                 required: true
                 default: full
                 type: choice
@@ -22,7 +22,7 @@ concurrency:
 
 jobs:
     avalanche-self-hosted:
-        name: Avalanche Serial (${{ inputs.test_profile || 'full' }})
+        name: Avalanche Tests (${{ inputs.test_profile || 'full' }})
         runs-on:
             - self-hosted
             - linux
