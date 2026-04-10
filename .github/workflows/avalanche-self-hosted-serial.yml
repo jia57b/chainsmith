@@ -185,3 +185,88 @@ jobs:
                   set -euo pipefail
                   chmod +x chains/avalanche-cli-local/stop-multinode.sh
                   chains/avalanche-cli-local/stop-multinode.sh clean || true
+
+    deploy-report:
+        name: Deploy Avalanche Report to GitHub Pages
+        needs: avalanche-self-hosted
+        runs-on: ubuntu-latest
+        concurrency:
+            group: deploy-pages
+            cancel-in-progress: false
+        permissions:
+            contents: write
+        env:
+            CHAIN_ENV: avalanche-local
+            TEST_PROFILE: ${{ inputs.test_profile || 'full' }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Download test report artifact
+              uses: actions/download-artifact@v4
+              with:
+                  name: avalanche-self-hosted-report
+                  path: ./report
+
+            - name: Deploy to gh-pages branch
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  REPORT_DIR="${CHAIN_ENV}/${{ github.run_id }}"
+                  MAX_REPORTS=20
+
+                  git config --global user.name "github-actions[bot]"
+                  git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+                  git clone --branch gh-pages --single-branch \
+                    "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+                    gh-pages 2>/dev/null || {
+                    mkdir gh-pages
+                    cd gh-pages
+                    git init
+                    git checkout -b gh-pages
+                    git remote add origin "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git"
+                    cd ..
+                  }
+
+                  mkdir -p "gh-pages/${REPORT_DIR}"
+                  cp -r ./report/* "gh-pages/${REPORT_DIR}/"
+                  echo "$(date -u '+%Y-%m-%d %H:%M')" > "gh-pages/${REPORT_DIR}/timestamp.txt"
+                  echo "${TEST_PROFILE}" > "gh-pages/${REPORT_DIR}/profile.txt"
+                  echo "✅ Report copied to ${REPORT_DIR}/"
+
+                  cd gh-pages
+                  if [ -d "${CHAIN_ENV}" ]; then
+                    REPORT_COUNT=$(ls -1d ${CHAIN_ENV}/*/ 2>/dev/null | wc -l)
+                    if [ "${REPORT_COUNT}" -gt "${MAX_REPORTS}" ]; then
+                      REMOVE_COUNT=$((REPORT_COUNT - MAX_REPORTS))
+                      ls -1d ${CHAIN_ENV}/*/ | head -n "${REMOVE_COUNT}" | while read -r dir; do
+                        echo "🗑️  Removing old report: ${dir}"
+                        rm -rf "${dir}"
+                      done
+                    fi
+                  fi
+
+                  echo "📑 Generating test report index..."
+                  chmod +x "$GITHUB_WORKSPACE/scripts/generate-report-index.sh"
+                  bash "$GITHUB_WORKSPACE/scripts/generate-report-index.sh"
+
+                  git add -A
+                  git commit -m "Deploy Avalanche self-hosted report: ${CHAIN_ENV}/#${{ github.run_id }}" || echo "No changes to commit"
+                  git push origin gh-pages
+
+                  REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+                  PAGES_BASE="https://${{ github.repository_owner }}.github.io/${REPO_NAME}"
+                  REPORT_URL="${PAGES_BASE}/${REPORT_DIR}/"
+                  INDEX_URL="${PAGES_BASE}/"
+
+                  echo "## 📊 Avalanche Report Deployed" >> "$GITHUB_STEP_SUMMARY"
+                  echo "" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| | |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| **Chain** | \`${CHAIN_ENV}\` |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| **Profile** | \`${TEST_PROFILE}\` |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| **Run ID** | \`${{ github.run_id }}\` |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| **Report** | [${REPORT_DIR}](${REPORT_URL}) |" >> "$GITHUB_STEP_SUMMARY"
+                  echo "| **Index** | [View All Reports](${INDEX_URL}) |" >> "$GITHUB_STEP_SUMMARY"
